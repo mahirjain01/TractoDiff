@@ -9,6 +9,7 @@ __pycache__/*
 loginfo/*
 loginfo
 
+*.pth.tar  
 *.pth
 *.png
 *.jpg
