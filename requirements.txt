@@ -3,7 +3,6 @@ omegaconf
 PyBresenham
 catkin_pkg
 rospkg
-rospy
 opencv-python
 empy
 open3d

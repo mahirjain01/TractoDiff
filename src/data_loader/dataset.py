@@ -36,7 +36,7 @@ def process_single_lidar(line_pts, distance, lidar_horizons, lidar_angle_range, 
 
 class TrainData(Dataset):
     def __init__(self, cfg, train: bool):
-        with open(join(cfg.root, "data.pkl"), "rb") as input_file:
+        with open(join(cfg.root, "data_subsample.pkl"), "rb") as input_file:
             data = pickle.load(input_file)
         self.original_files = data[DataDict.file_names]
         self.data_root = join(cfg.root, "data_folder")

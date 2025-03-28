@@ -22,9 +22,18 @@ class HNav(nn.Module):
             self.perception = Perception(self.config.perception)
             self.generator = Diffusion(self.config.diffusion)
         else:
-            raise "the generator type is not defined"
+            raise ValueError("the generator type is not defined")
+            
+        # Move components to the specified device
+        self.perception = self.perception.to(device)
+        self.generator = self.generator.to(device)
 
     def forward(self, input_dict, sample=False):
+        # Ensure we're on the correct device
+        curr_device = next(self.parameters()).device
+        if str(curr_device) != str(self.device):
+            self.to(self.device)
+            
         if sample:
             return self.sample(input_dict=input_dict)
         else:
@@ -40,6 +49,11 @@ class HNav(nn.Module):
             return output
 
     def sample(self, input_dict):
+        # Ensure we're on the correct device
+        curr_device = next(self.parameters()).device
+        if str(curr_device) != str(self.device):
+            self.to(self.device)
+            
         output = {}
         if DataDict.path in input_dict.keys():
             output.update({DataDict.path: input_dict[DataDict.path]})
@@ -55,4 +69,5 @@ class HNav(nn.Module):
 
 
 def get_model(config, device):
-    return HNav(config=config, device=device)
+    model = HNav(config=config, device=device)
+    return model.to(device)

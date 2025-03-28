@@ -171,6 +171,8 @@ class Loss(nn.Module):
             y_hat_poses = y_hat * self.scale_waypoints
         else:
             y_hat_poses = torch.cumsum(y_hat, dim=1) * self.scale_waypoints
+        
+        print("Shape of groundtruth: ", y_hat_poses.shape)
 
         if self.output_dir is not None:
             all_trajectories = input_dict[DataDict.all_trajectories]
@@ -196,10 +198,39 @@ class Loss(nn.Module):
 
             if self.use_traversability:
                 local_map = input_dict[DataDict.local_map]
-                traversability_loss = self._local_collision(yhat=y_hat_poses, local_map=local_map)
+                traversability_loss, traversability_values = self._local_collision(yhat=y_hat_poses, local_map=local_map)
                 traversability_loss_mean = traversability_loss.mean()
                 output.update({LossNames.evaluate_traversability: traversability_loss_mean})
             return output
+
+    def consistency_loss(self, output_dict, teacher_model=True, num_scales=40):
+        """
+        Compute consistency distillation loss
+        Args:
+            output_dict: Model output dictionary
+            teacher_model: Whether to use teacher model predictions (True) or target model (False)
+            num_scales: Number of noise scales to use
+        Returns:
+            Dictionary of loss values
+        """
+        # Get predictions
+        student_pred = output_dict[DataDict.prediction]
+        
+        if teacher_model:
+            reference_pred = output_dict["teacher_prediction"]
+        else:
+            reference_pred = output_dict["target_prediction"]
+        
+        # Compute L2 loss between student and reference predictions
+        consistency_loss = torch.mean((student_pred - reference_pred) ** 2)
+        
+        # Combine with any other relevant losses from your existing framework
+        loss_dict = {
+            LossNames.consistency_loss: consistency_loss,
+            LossNames.loss: consistency_loss  # Main loss for backward
+        }
+        
+        return loss_dict
 
 
 def write_png(local_map=None, rgb_local_map=None, center=None, targets=None, paths=None, paths_color=None, path=None,

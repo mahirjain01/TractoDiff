@@ -21,24 +21,19 @@ from src.utils.configs import TrainingConfig, ScheduleMethods, LossNames, LogNam
 from src.loss import Loss
 from src.models.model import get_model
 from src.utils.functions import to_device, get_device, release_cuda
-from src.data_loader.data_loader import train_data_loader, evaluation_data_loader
+from src.data_loader.data_loader import evaluation_data_loader
 
 
-class Trainer:
+class Inference:
     def __init__(self, cfgs: TrainingConfig):
-        """
-        This class is the trainner
-        Args:
-            cfgs: the configuration of the training class
-        """
-        self.name = cfgs.name
-        self.max_epoch = cfgs.max_epoch
-        self.evaluation_freq = cfgs.evaluation_freq
-        self.train_time_steps = cfgs.train_time_steps
 
+        self.evaluation_freq = cfgs.evaluation_freq
+
+        self.name = cfgs.name
         self.iteration = 0
         self.epoch = 0
         self.training = False
+        self.output_dir = cfgs.output_dir
 
         # set up gpus
         if cfgs.gpus.device == "cuda":
@@ -73,34 +68,15 @@ class Trainer:
         self._ensure_model_on_device()
 
         # set up loggers
-        self.output_dir = cfgs.output_dir
         configs = {
             "lr": cfgs.lr,
             "lr_t0": cfgs.lr_t0,
             "lr_tm": cfgs.lr_tm,
             "lr_min": cfgs.lr_min,
             "gpus": cfgs.gpus,
-            "epochs": self.max_epoch
         }
-        wandb.login(key=cfgs.wandb_api)
-        if self.distributed:
-            self.wandb_run = wandb.init(project=self.name, config=configs, group="DDP")
-        else:
-            self.wandb_run = wandb.init(project=self.name, config=configs)
 
-        # loss, optimizer and scheduler
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=cfgs.lr, weight_decay=cfgs.weight_decay)
-        self.scheduler_type = cfgs.scheduler
-        if self.scheduler_type == ScheduleMethods.step:
-            self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, cfgs.lr_decay_steps, gamma=cfgs.lr_decay)
-        elif self.scheduler_type == ScheduleMethods.cosine:
-            self.scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(self.optimizer, eta_min=cfgs.lr_min,
-                                                                                  T_0=cfgs.lr_t0, T_mult=cfgs.lr_tm)
-        else:
-            raise ValueError("the current scheduler is not defined")
-
-        if self.snapshot and not cfgs.only_model:
-            self.load_learning_parameters(state_dict)
+        self.load_learning_parameters(state_dict)
 
         # loss functions
         if self.device == "cuda":
@@ -109,7 +85,6 @@ class Trainer:
             self.loss_func = Loss(cfg=cfgs.loss).to(self.device)
 
         # datasets:
-        self.training_data_loader = train_data_loader(cfg=cfgs.data)
         self.evaluation_data_loader = evaluation_data_loader(cfg=cfgs.data)
 
         self.use_traversability = cfgs.loss.use_traversability
@@ -207,64 +182,18 @@ class Trainer:
         return state_dict
 
     def load_learning_parameters(self, state_dict):
-        # Load other attributes
+        # For inference, we might only want to keep track of which epoch/iteration 
+        # the model was saved from
         if 'epoch' in state_dict:
             self.epoch = state_dict['epoch']
-            print('Epoch has been loaded: {}.'.format(self.epoch))
+            print('Model was saved at epoch: {}.'.format(self.epoch))
         if 'iteration' in state_dict:
             self.iteration = state_dict['iteration']
-            print('Iteration has been loaded: {}.'.format(self.iteration))
-        if 'optimizer' in state_dict and self.optimizer is not None:
-            try:
-                self.optimizer.load_state_dict(state_dict['optimizer'])
-                print('Optimizer has been loaded.')
-            except:
-                print("doesn't load optimizer")
-        if 'scheduler' in state_dict and self.scheduler is not None:
-            try:
-                self.scheduler.load_state_dict(state_dict['scheduler'])
-                print('Scheduler has been loaded.')
-            except:
-                print("doesn't load scheduler")
-
-    def save_snapshot(self, filename):
-        """
-        save the snapshot of the model and other training parameters
-        Args:
-            filename: the output filename that is the full directory
-        """
-        if self.distributed:
-            model_state_dict = self.model.module.state_dict()
-        else:
-            model_state_dict = self.model.state_dict()
-
-        # save model
-        state_dict = {'state_dict': model_state_dict}
-        torch.save(state_dict, filename)
-        # print('Model saved to "{}"'.format(filename))
-
-        # save snapshot
-        state_dict['epoch'] = self.epoch
-        state_dict['iteration'] = self.iteration
-        snapshot_filename = osp.join(self.output_dir, str(self.name) + 'snapshot.pth.tar')
-        state_dict['optimizer'] = self.optimizer.state_dict()
-        if self.scheduler is not None:
-            state_dict['scheduler'] = self.scheduler.state_dict()
-        torch.save(state_dict, snapshot_filename)
-        # print('Snapshot saved to "{}"'.format(snapshot_filename))
+            print('Model was saved at iteration: {}.'.format(self.iteration))
 
     def cleanup(self):
         if self.distributed:
             dist.destroy_process_group()
-        self.wandb_run.finish()
-
-    def set_train_mode(self):
-        """
-        set the model to the training mode: parameters are differentiable
-        """
-        self.training = True
-        self.model.train()
-        torch.set_grad_enabled(True)
 
     def set_eval_mode(self):
         """
@@ -273,13 +202,6 @@ class Trainer:
         self.training = False
         self.model.eval()
         torch.set_grad_enabled(False)
-
-    def optimizer_step(self):
-        """
-        run one step of the optimizer
-        """
-        self.optimizer.step()
-        self.optimizer.zero_grad()
 
     def _ensure_model_on_device(self):
         """Helper method to ensure model is on the correct device"""
@@ -292,7 +214,7 @@ class Trainer:
         else:
             self.model = self.model.to(self.device)
         
-    def step(self, data_dict, train=True) -> Tuple[dict, dict]:
+    def step(self, data_dict) -> Tuple[dict, dict]:
         """
         one step of the model, loss function and also the metrics
         Args:
@@ -307,101 +229,73 @@ class Trainer:
         device = self.device
         data_dict = to_device(data_dict, device=device)
         
-        if train:
-            output_dict = self.model(data_dict, sample=False)
-            torch.cuda.empty_cache()
-            # Ensure loss function is on same device
-            self.loss_func = self.loss_func.to(device)
-            loss_dict = self.loss_func(output_dict)
-            output_dict.update(loss_dict)
-            torch.cuda.empty_cache()
-        else:
-            output_dict = self.model(data_dict, sample=True)
-            torch.cuda.empty_cache()
-            # Ensure loss function is on same device
-            self.loss_func = self.loss_func.to(device)
-            eval_dict = self.loss_func.evaluate(output_dict)
-            output_dict.update(eval_dict)
+        output_dict = self.model(data_dict, sample=True)
+        output_dict[DataDict.path] = data_dict[DataDict.path]
+        if DataDict.local_map in data_dict:
+            output_dict[DataDict.local_map] = data_dict[DataDict.local_map]
+
+        torch.cuda.empty_cache()
+        # Ensure loss function is on same device
+        self.loss_func = self.loss_func.to(device)
+        eval_dict = self.loss_func.evaluate(output_dict)
+        output_dict.update(eval_dict)
+
         return output_dict
 
-    def update_log(self, results, timestep=None, log_name=None):
-        if timestep is not None:
-            self.wandb_run.log({LogNames.step_time: timestep})
-        if log_name == LogTypes.train:
-            value = self.scheduler.get_last_lr()
-            self.wandb_run.log({log_name + "/" + LogNames.lr: value[-1]})
 
-        if log_name is None:
-            for key, value in results.items():
-                self.wandb_run.log({key: value})
-        else:
-            for key, value in results.items():
-                self.wandb_run.log({log_name + "/" + key: value})
-
-    def run_epoch(self):
-        """
-        run training epochs
-        """
-        self.optimizer.zero_grad()
-
-        last_time = time.time()
-        # with open(self.output_file, "a") as f:
-        #     print("Training CUDA {} Epoch {} \n".format(self.current_rank, self.epoch), file=f)
-        for iteration, data_dict in enumerate(
-                tqdm(self.training_data_loader, desc="Training Epoch {}".format(self.epoch))):
-            self.iteration += 1
-            data_dict[DataDict.traversable_step] = self.time_step_number
-            for step_iteration in range(self.train_time_steps):
-                output_dict = self.step(data_dict=data_dict)
-                torch.cuda.empty_cache()
-
-                output_dict[LossNames.loss].backward()
-                self.optimizer_step()
-                optimize_time = time.time()
-
-                output_dict = release_cuda(output_dict)
-                self.update_log(results=output_dict, timestep=optimize_time - last_time, log_name=LogTypes.train)
-                last_time = time.time()
-        self.scheduler.step()
-
-        if not self.distributed or (self.distributed and self.current_rank == 0):
-            os.makedirs('{}/models'.format(self.output_dir), exist_ok=True)
-            self.save_snapshot('{}/models/{}_{}.pth'.format(self.output_dir, self.name, self.epoch))
-
-    def inference_epoch(self):
-        if (self.evaluation_freq > 0) and (self.epoch % self.evaluation_freq == 0):
-            # Ensure model and loss function are on correct device
-            self._ensure_model_on_device()
-            device = self.device
+    def Inference_res(self):
+        results = []
+        
+        # Ensure model and loss function are on correct device
+        self._ensure_model_on_device()
+        device = self.device
+        
+        # Move loss function to correct device
+        self.loss_func = self.loss_func.to(device)
             
-            # Move loss function to correct device
-            self.loss_func = self.loss_func.to(device)
-                
-            for iteration, data_dict in enumerate(tqdm(self.evaluation_data_loader,
-                                                       desc="Evaluation Losses Epoch {}".format(self.epoch))):
-                start_time = time.time()
-                # Ensure input data is on correct device
-                data_dict = to_device(data_dict, device=device)
-                output_dict = self.step(data_dict, train=False)
-                torch.cuda.synchronize()
-                step_time = time.time()
-                output_dict = release_cuda(output_dict)
-                torch.cuda.empty_cache()
-                self.update_log(results=output_dict, timestep=step_time - start_time, log_name=LogTypes.others)
+        for iteration, data_dict in enumerate(tqdm(self.evaluation_data_loader,
+                                                    desc="Running inference...")):
+            start_time = time.time()
+            # Ensure input data is on correct device
+            data_dict = to_device(data_dict, device=device)
+            output_dict = self.step(data_dict)
+            torch.cuda.synchronize()
+            step_time = time.time()
+
+            if hasattr(self, 'output_dir'):
+                self.save_results(
+                    output_dict, 
+                    os.path.join(self.output_dir, f'result_{iteration}.pth')
+                )
+            
+            if iteration == 0:  # Check first batch
+                print("Data shapes:")
+                print(f"Ground truth: {output_dict[DataDict.path].shape}")
+                print(f"Prediction: {output_dict[DataDict.prediction].shape}")
+            
+            output_dict = release_cuda(output_dict)
+            results.append(output_dict)
+            torch.cuda.empty_cache()
+    
+        return results
 
     def run(self):
         """
-        run the training process
+        Run inference on the evaluation dataset
         """
-        torch.autograd.set_detect_anomaly(True)
-        for self.epoch in range(self.epoch, self.max_epoch, 1):
-            self.set_eval_mode()
-            self.inference_epoch()
-
-            self.set_train_mode()
-            if self.distributed:
-                self.training_data_loader.sampler.set_epoch(self.epoch)
-                if self.evaluation_freq > 0:
-                    self.evaluation_data_loader.sampler.set_epoch(self.epoch)
-            self.run_epoch()
+        torch.autograd.set_detect_anomaly(False) 
+        self.set_eval_mode()
+        self.Inference_res()
         self.cleanup()
+
+    def save_results(self, output_dict, file_path):
+        """Save inference results to disk"""
+        results = {
+            'predictions': output_dict[DataDict.prediction],
+            'evaluation_metrics': {
+                'path_distance': output_dict[LossNames.evaluate_path_dis],
+                'last_distance': output_dict[LossNames.evaluate_last_dis]
+            }
+        }
+        # print("The results are :", results)
+        torch.save(results, os.path.join(file_path))

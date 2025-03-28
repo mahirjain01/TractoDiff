@@ -32,21 +32,23 @@ def to_device(x, device):
     put the input to a torch tensor in the given device
     Args:
         x: list, tuple of torch tensors, dict of torch tensors or torch tensors
-        device: pytorch device
+        device: pytorch device or string ('cuda', 'cuda:0', 'cpu')
     Returns:
         the input data in the given device
     """
+    # Convert string device to torch.device if needed
+    if isinstance(device, str):
+        device = torch.device(device)
+        
     if isinstance(x, list):
         x = [to_device(item, device) for item in x]
     elif isinstance(x, tuple):
-        x = (to_device(item, device) for item in x)
+        x = tuple(to_device(item, device) for item in x)
     elif isinstance(x, dict):
         x = {key: to_device(value, device) for key, value in x.items()}
     elif isinstance(x, torch.Tensor):
-        if device == "cuda":
-            x = x.cuda()
-        else:
-            x = x.to(device)
+        # Always use .to() method for consistency
+        x = x.to(device)
     return x
 
 

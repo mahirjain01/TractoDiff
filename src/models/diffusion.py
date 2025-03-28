@@ -18,6 +18,8 @@ class Diffusion(nn.Module):
                                              prediction_type="sample", num_train_timesteps=cfg.num_train_timesteps,
                                              clip_sample_range=cfg.clip_sample_range, clip_sample=cfg.clip_sample,
                                              beta_schedule=cfg.beta_schedule, variance_type=cfg.variance_type)
+        # Initialize scheduler timesteps to None, will be set properly in sample()
+        self.noise_scheduler.timesteps = None
         self.time_steps = cfg.num_train_timesteps
         self.use_traversability = cfg.use_traversability
         self.estimate_traversability = cfg.estimate_traversability
@@ -52,6 +54,19 @@ class Diffusion(nn.Module):
         else:
             raise Exception("the diffusion model type is not defined")
 
+    def _ensure_scheduler_on_device(self, device):
+        """Ensure all scheduler tensors are on the same device."""
+        if hasattr(self.noise_scheduler, 'timesteps') and self.noise_scheduler.timesteps is not None:
+            self.noise_scheduler.timesteps = self.noise_scheduler.timesteps.to(device)
+        if hasattr(self.noise_scheduler, 'alphas_cumprod'):
+            self.noise_scheduler.alphas_cumprod = self.noise_scheduler.alphas_cumprod.to(device)
+        if hasattr(self.noise_scheduler, 'final_alpha_cumprod'):
+            self.noise_scheduler.final_alpha_cumprod = self.noise_scheduler.final_alpha_cumprod.to(device)
+        if hasattr(self.noise_scheduler, 'betas'):
+            self.noise_scheduler.betas = self.noise_scheduler.betas.to(device)
+        if hasattr(self.noise_scheduler, 'alphas'):
+            self.noise_scheduler.alphas = self.noise_scheduler.alphas.to(device)
+
     def add_trajectory_noise(self, trajectory):
         noise = torch.randn(trajectory.shape, device=trajectory.device)
         return noise
@@ -65,9 +80,14 @@ class Diffusion(nn.Module):
         return time_step
 
     def add_trajectory_step_noise(self, trajectory, traversable_step=None):
+        device = trajectory.device
+        # Ensure scheduler is on the right device
+        self._ensure_scheduler_on_device(device)
+        
         noise = self.add_trajectory_noise(trajectory=trajectory)
         time_step = self.add_time_step_noise(trajectory=trajectory)
         noisy_trajectory = self.noise_scheduler.add_noise(original_samples=trajectory, noise=noise, timesteps=time_step)
+        
         if self.use_traversability:
             t_trajectories = trajectory.clone()
             t_noise = self.add_trajectory_noise(trajectory=t_trajectories)
@@ -103,15 +123,21 @@ class Diffusion(nn.Module):
         h_condition = self.trajectory_condition(h)
 
         B, C = h_condition.shape
+        device = h_condition.device
+        
         trajectory = torch.randn(size=(h_condition.shape[0], self.waypoints_num, self.waypoint_dim),
-                                 dtype=h_condition.dtype, device=h_condition.device, generator=None)
+                                 dtype=h_condition.dtype, device=device, generator=None)
         all_trajectories = []
         scheduler = self.noise_scheduler
+        
+        # Properly initialize timesteps on the correct device
         scheduler.set_timesteps(self.time_steps)
+        # Ensure all scheduler tensors are on the right device
+        self._ensure_scheduler_on_device(device)
+            
         for t in scheduler.timesteps:
             if (self.sample_times >= 0) and (t < self.time_steps - 1 - self.sample_times):
                 break
-            t = t.to(h_condition.device)
             model_output = self.diff_model(trajectory, t.unsqueeze(0).repeat(B, ), local_cond=None,
                                            global_cond=h_condition)
             trajectory = scheduler.step(model_output, t, trajectory, generator=None).prev_sample.contiguous()

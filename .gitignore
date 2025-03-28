@@ -9,3 +9,21 @@ __pycache__/*
 loginfo/*
 loginfo
 
+*.pth
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.tiff
+*.webp
+*.pkl
+
+wandb/*
+wandb
+
+*.log
+*.log.*
+
+data_sample/
+environment/

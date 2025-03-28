@@ -79,7 +79,7 @@ Lidar_cfg.angle_range = 200
 
 DatasetConfig = edict()  # Configuration of data loaders
 DatasetConfig.name = ""
-DatasetConfig.root = ""
+DatasetConfig.root = "/tracto/DTG/data_sample"
 DatasetConfig.batch_size = 16
 DatasetConfig.num_workers = 8
 DatasetConfig.shuffle = False
@@ -190,6 +190,7 @@ class LossNames:
     evaluate_path_dis = "evaluate_path_dis"
     evaluate_traversability = "evaluate_traversability"
     evaluate_estimation_traversability = "evaluate_estimation_traversability"
+    consistency_loss = "consistency_loss"
 
     loss = "loss"
 
@@ -210,7 +211,7 @@ LossConfig.root = "/home/jing/Documents/gn/database/datasets/regular_data"
 LossConfig.map_resolution = 0.1
 LossConfig.map_range = 300
 LossConfig.image_separate = 20
-LossConfig.output_dir = None
+LossConfig.output_dir = "/tracto/DTG/images_2"
 
 
 #########################################################################
@@ -235,8 +236,8 @@ TrainingConfig = edict()
 TrainingConfig.name = ""
 TrainingConfig.wandb_api = ""
 TrainingConfig.only_model = False
-TrainingConfig.output_dir = "./results"
-TrainingConfig.snapshot = "./pretrained.pth.tar"
+TrainingConfig.output_dir = "/tracto/DTG/results_2"
+TrainingConfig.snapshot = ""
 TrainingConfig.max_epoch = 150
 TrainingConfig.evaluation_freq = 5
 TrainingConfig.train_time_steps = 32

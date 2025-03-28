@@ -1,0 +1,18 @@
+epochs:
+  value: 5
+lr:
+  value: 2e-05
+lr_min:
+  value: 1e-08
+lr_t0:
+  value: 1
+lr_tm:
+  value: 30
+gpus:
+  value:
+    device: cpu
+    local_rank: 0
+    channels_last: true
+    sync_bn: false
+    no_ddp_bb: false
+    split_bn: false 
