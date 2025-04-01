@@ -28,3 +28,6 @@ wandb
 
 data_sample/
 environment/
+
+snapshots/*
+snapshots

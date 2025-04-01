@@ -30,8 +30,8 @@ def main():
 
     cfgs = get_configuration()
 
-    cfgs.loss.output_dir = "/tracto/DTG/inference_results"
-    cfgs.output_dir = "/tracto/DTG/inference_results"
+    cfgs.loss.output_dir = "/tracto/TractoDiff/inference_results"
+    cfgs.output_dir = "/tracto/TractoDiff/inference_results"
     
     inferencer = Inference(cfgs)
     

@@ -244,7 +244,14 @@ class Inference:
 
 
     def Inference_res(self):
-        results = []
+        # Initialize metric accumulators
+        total_metrics = {
+            'path_distance': 0.0,
+            'last_distance': 0.0,
+            'traversability': 0.0 if self.use_traversability else None,
+            'inference_time': 0.0  # New accumulator for inference time
+        }
+        sample_count = 0
         
         # Ensure model and loss function are on correct device
         self._ensure_model_on_device()
@@ -255,18 +262,29 @@ class Inference:
             
         for iteration, data_dict in enumerate(tqdm(self.evaluation_data_loader,
                                                     desc="Running inference...")):
+            # Start timing
             start_time = time.time()
+            
             # Ensure input data is on correct device
             data_dict = to_device(data_dict, device=device)
             output_dict = self.step(data_dict)
-            torch.cuda.synchronize()
-            step_time = time.time()
-
-            if hasattr(self, 'output_dir'):
-                self.save_results(
-                    output_dict, 
-                    os.path.join(self.output_dir, f'result_{iteration}.pth')
-                )
+            
+            # End timing and synchronize if using GPU
+            if device.type == 'cuda':
+                torch.cuda.synchronize()
+            inference_time = time.time() - start_time
+            
+            # Print individual sample inference time
+            print(f"\nSample {iteration + 1} inference time: {inference_time:.4f} seconds")
+            
+            # Accumulate metrics
+            total_metrics['path_distance'] += output_dict[LossNames.evaluate_path_dis].item()
+            total_metrics['last_distance'] += output_dict[LossNames.evaluate_last_dis].item()
+            total_metrics['inference_time'] += inference_time
+            if self.use_traversability:
+                total_metrics['traversability'] += output_dict[LossNames.evaluate_traversability].item()
+            
+            sample_count += 1
             
             if iteration == 0:  # Check first batch
                 print("Data shapes:")
@@ -274,10 +292,33 @@ class Inference:
                 print(f"Prediction: {output_dict[DataDict.prediction].shape}")
             
             output_dict = release_cuda(output_dict)
-            results.append(output_dict)
             torch.cuda.empty_cache()
-    
-        return results
+
+        # Calculate averages
+        avg_metrics = {
+            key: value / sample_count if value is not None else None 
+            for key, value in total_metrics.items()
+        }
+        
+        # Save metrics to text file
+        metrics_file = os.path.join(self.output_dir, 'average_metrics.txt')
+        with open(metrics_file, 'w') as f:
+            f.write(f"Evaluation Results (averaged over {sample_count} samples):\n")
+            f.write("-" * 50 + "\n")
+            f.write(f"Average Path Distance: {avg_metrics['path_distance']:.4f}\n")
+            f.write(f"Average Last Position Distance: {avg_metrics['last_distance']:.4f}\n")
+            if self.use_traversability:
+                f.write(f"Average Traversability Score: {avg_metrics['traversability']:.4f}\n")
+            f.write(f"Average Inference Time: {avg_metrics['inference_time']:.4f} seconds\n")
+            f.write(f"Total Inference Time: {total_metrics['inference_time']:.4f} seconds\n")
+            f.write("-" * 50 + "\n")
+            f.write(f"Model snapshot from epoch {self.epoch}, iteration {self.iteration}\n")
+            f.write(f"Device used: {self.device}\n")
+        
+        print(f"\nAverage metrics have been saved to: {metrics_file}")
+        print(f"Average inference time per sample: {avg_metrics['inference_time']:.4f} seconds")
+        print(f"Total inference time: {total_metrics['inference_time']:.4f} seconds")
+        return avg_metrics
 
     def run(self):
         """
@@ -287,15 +328,3 @@ class Inference:
         self.set_eval_mode()
         self.Inference_res()
         self.cleanup()
-
-    def save_results(self, output_dict, file_path):
-        """Save inference results to disk"""
-        results = {
-            'predictions': output_dict[DataDict.prediction],
-            'evaluation_metrics': {
-                'path_distance': output_dict[LossNames.evaluate_path_dis],
-                'last_distance': output_dict[LossNames.evaluate_last_dis]
-            }
-        }
-        # print("The results are :", results)
-        torch.save(results, os.path.join(file_path))

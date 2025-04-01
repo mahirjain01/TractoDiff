@@ -79,7 +79,7 @@ Lidar_cfg.angle_range = 200
 
 DatasetConfig = edict()  # Configuration of data loaders
 DatasetConfig.name = ""
-DatasetConfig.root = "/tracto/DTG/data_sample"
+DatasetConfig.root = "/tracto/TractoDiff/data_sample"
 DatasetConfig.batch_size = 16
 DatasetConfig.num_workers = 8
 DatasetConfig.shuffle = False
