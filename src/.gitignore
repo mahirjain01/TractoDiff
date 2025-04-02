@@ -15,3 +15,6 @@ results/*
 
 libs/*
 ./libs/*
+
+gpu_logs/*
+./gpu_logs/*
