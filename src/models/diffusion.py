@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
+from diffusers.schedulers.scheduling_ddim import DDIMScheduler
 
 from src.models.backbones.rnn import RNNDiffusion
 from src.models.backbones.unet import ConditionalUnet1D
@@ -14,10 +15,11 @@ class Diffusion(nn.Module):
         # self.diffusion_type = cfg.diffusion_type
         self.use_all_paths = cfg.use_all_paths
         self.sample_times = cfg.sample_times
-        self.noise_scheduler = DDPMScheduler(beta_start=cfg.beta_start, beta_end=cfg.beta_end,
+        self.inference_steps = getattr(cfg, 'inference_steps', None)  # Get inference_steps from config or use None
+        self.noise_scheduler = DDIMScheduler(beta_start=cfg.beta_start, beta_end=cfg.beta_end,
                                              prediction_type="sample", num_train_timesteps=cfg.num_train_timesteps,
                                              clip_sample_range=cfg.clip_sample_range, clip_sample=cfg.clip_sample,
-                                             beta_schedule=cfg.beta_schedule, variance_type=cfg.variance_type)
+                                             beta_schedule=cfg.beta_schedule)
         # Initialize scheduler timesteps to None, will be set properly in sample()
         self.noise_scheduler.timesteps = None
         self.time_steps = cfg.num_train_timesteps
@@ -130,8 +132,14 @@ class Diffusion(nn.Module):
         all_trajectories = []
         scheduler = self.noise_scheduler
         
+        # DDIM can use fewer steps for inference
+        if self.inference_steps is not None:
+            num_inference_steps = self.inference_steps
+        else:
+            num_inference_steps = min(50, self.time_steps // 10)  # Default to fewer steps
+        
         # Properly initialize timesteps on the correct device
-        scheduler.set_timesteps(self.time_steps)
+        scheduler.set_timesteps(num_inference_steps)
         # Ensure all scheduler tensors are on the right device
         self._ensure_scheduler_on_device(device)
             

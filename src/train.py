@@ -260,7 +260,7 @@ class Trainer:
 
     def set_train_mode(self):
         """
-        set the model to the training mode: parameters are differentiable
+        set the model to the training mode: parameters are differentiable 
         """
         self.training = True
         self.model.train()

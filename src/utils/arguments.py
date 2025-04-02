@@ -37,7 +37,7 @@ def get_args():
     parser.add_argument('--sync-bn', action='store_true', default=False,
                         help='Enable NVIDIA Apex or Torch synchronized BatchNorm.')
     parser.add_argument('--split-bn', action='store_true', help='Enable separate BN layers per augmentation split.')
-    parser.add_argument('--device', type=int, default=-1, help="the gpu id")
+    parser.add_argument('--device', type=int, default=1, help="the gpu id")
     parser.add_argument('--no-ddp-bb', action='store_true', default=False,
                         help='Force broadcast buffers for native DDP to off.')
     return parser.parse_args()
