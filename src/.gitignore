@@ -18,3 +18,10 @@ libs/*
 
 gpu_logs/*
 ./gpu_logs/*
+
+/tracto/TractoDiff/gpu_logs/*
+/tracto/TractoDiff/results/*
+/tracto/TractoDiff/libs/*
+/tracto/TractoDiff/build/*
+/tracto/TractoDiff/vg.egg-info/*
+/tracto/TractoDiff/__pycache__/*
