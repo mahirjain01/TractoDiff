@@ -33,7 +33,16 @@ class HNav(nn.Module):
         curr_device = next(self.parameters()).device
         if str(curr_device) != str(self.device):
             self.to(self.device)
-            
+
+        # output = {DataDict.path: input_dict[DataDict.path],
+        #               DataDict.heuristic: input_dict[DataDict.heuristic],
+        #               DataDict.local_map: input_dict[DataDict.local_map]}
+
+        # # /////// shape for condition vector /////////////
+        # observation = self.perception(lidar=input_dict[DataDict.lidar], vel=input_dict[DataDict.vel],
+        #                                 target=input_dict[DataDict.target])
+        # print("The observation shape is: ", observation.shape)
+        
         if sample:
             return self.sample(input_dict=input_dict)
         else:
@@ -43,6 +52,7 @@ class HNav(nn.Module):
 
             observation = self.perception(lidar=input_dict[DataDict.lidar], vel=input_dict[DataDict.vel],
                                           target=input_dict[DataDict.target])
+            print("The observation shape is: ", observation.shape)
             generator_output = self.generator(observation=observation, gt_path=input_dict[DataDict.path],
                                               traversable_step=input_dict[DataDict.traversable_step])
             output.update(generator_output)

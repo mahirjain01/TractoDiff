@@ -55,6 +55,9 @@ class Perception(nn.Module):
         )
 
     def forward(self, lidar, vel, target):
+
+        print("The lidar shape is: ", lidar.shape)
+
         lidar_fts = self.lidar_model(lidar)  # B x 512
 
         VB, VN, VD = vel.size()

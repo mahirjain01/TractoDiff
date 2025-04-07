@@ -1,0 +1,10 @@
+Evaluation Results (averaged over 11 samples):
+--------------------------------------------------
+Average Path Distance: 11.0553
+Average Last Position Distance: 184.2215
+Average Traversability Score: 1.7988
+Average Inference Time: 0.3951 seconds
+Total Inference Time: 4.3464 seconds
+--------------------------------------------------
+Model snapshot from epoch 5, iteration 0
+Device used: cuda:1

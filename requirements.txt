@@ -23,3 +23,5 @@ networkx
 diffusers
 wandb
 imageio
+dipy
+nibabel

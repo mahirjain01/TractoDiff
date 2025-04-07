@@ -172,7 +172,7 @@ class Loss(nn.Module):
         else:
             y_hat_poses = torch.cumsum(y_hat, dim=1) * self.scale_waypoints
         
-        # print("Shape of groundtruth: ", y_hat_poses.shape)
+        print("Shape of groundtruth: ", ygt.shape)
 
         if self.output_dir is not None:
             all_trajectories = input_dict[DataDict.all_trajectories]
