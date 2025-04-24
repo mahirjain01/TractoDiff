@@ -31,20 +31,24 @@ class Diffusion(nn.Module):
         self.zd = 512 
         self.waypoint_dim = 3
         self.diffusion_step_embed_dim = 256
-        cfg.perception_in = 334 
+        cfg.perception_in = 346
         # /////////////////////////////////////////////////// CHANGED FOR TRACTO ///////////////////////////////////////////////////
         
         self.waypoints_num = cfg.waypoints_num
-        if activation_func is None:
-            self.encoder = nn.Sequential(nn.Linear(cfg.perception_in, 1024), nn.LeakyReLU(0.1),
-                                         nn.Linear(1024, 2048), nn.LeakyReLU(0.2),
-                                         nn.Linear(2048, 512), nn.LeakyReLU(0.2),
-                                         nn.Linear(512, self.zd), nn.LeakyReLU(0.2))
-        else:
-            self.encoder = nn.Sequential(nn.Linear(cfg.perception_in, 1024), activation_func(),
+        self.encoder = nn.Sequential(nn.Linear(cfg.perception_in, 1024), activation_func(),
                                          nn.Linear(1024, 2048), activation_func(),
                                          nn.Linear(2048, 512), activation_func(),
                                          nn.Linear(512, self.zd), activation_func())
+        # if activation_func is None:
+        #     self.encoder = nn.Sequential(nn.Linear(cfg.perception_in, 1024), nn.LeakyReLU(0.1),
+        #                                  nn.Linear(1024, 2048), nn.LeakyReLU(0.2),
+        #                                  nn.Linear(2048, 512), nn.LeakyReLU(0.2),
+        #                                  nn.Linear(512, self.zd), nn.LeakyReLU(0.2))
+        # else:
+        #     self.encoder = nn.Sequential(nn.Linear(cfg.perception_in, 1024), activation_func(),
+        #                                  nn.Linear(1024, 2048), activation_func(),
+        #                                  nn.Linear(2048, 512), activation_func(),
+        #                                  nn.Linear(512, self.zd), activation_func())
         self.trajectory_condition = nn.Linear(self.zd, self.zd)
 
         if self.model_type == DiffusionModelType.crnn:

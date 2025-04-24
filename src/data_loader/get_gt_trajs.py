@@ -21,7 +21,7 @@ import pickle
 def main(bundle: str):
 
 
-    subs_list = ['sub-1119']
+    subs_list = ['sub-1079']
     print('Generating trajectories')
     # %%
 
@@ -44,7 +44,7 @@ def main(bundle: str):
         return sft
 
 
-    ttoi_path = '//tracto/TractoDiff/data/'
+    ttoi_path = '/tracto/TractoDiff/data/'
 
     def get_subject_ids(folder, split):
         subjects_path = os.path.join(folder, split)
@@ -54,7 +54,7 @@ def main(bundle: str):
         return subjects_list
 
 
-    splits = ['testset']
+    splits = ['trainset']
     all_subs_dict = {split: get_subject_ids(ttoi_path, split) for split in splits}
 
     def find_key_by_element(dictionary, target_element):
@@ -67,8 +67,8 @@ def main(bundle: str):
 
     for sub_id in subs_list:
         split = find_key_by_element(all_subs_dict, sub_id)
-        tract_fname = f'//tracto/TractoDiff/data/{split}/{sub_id}/tractography/{sub_id}__{bundle}.trk'
-        ref_anat_fname = f'//tracto/TractoDiff/data/{split}/{sub_id}/dti/{sub_id}__fa.nii.gz'
+        tract_fname = f'/tracto/TractoDiff/data/{split}/{sub_id}/tractography/{sub_id}__{bundle}.trk'
+        ref_anat_fname = f'/tracto/TractoDiff/data/{split}/{sub_id}/dti/{sub_id}__fa.nii.gz'
         tractogram_voxel_space = get_tractogram_in_voxel_space(tract_fname, ref_anat_fname)
 
         # space check:-
@@ -78,16 +78,16 @@ def main(bundle: str):
         print(f'original trk space: {og_sft.space}')
         print(f'modified trk space: {tractogram_voxel_space.space}')
 
-        dataset_file = f'//tracto/TractoDiff/data/{split}/{sub_id}/{sub_id}.hdf5'
-        wm_loc = f'//tracto/TractoDiff/data/{split}/{sub_id}/{sub_id}-generated_approximated_mask.nii.gz'
+        dataset_file = f'/tracto/TractoDiff/data/{split}/{sub_id}/{sub_id}.hdf5'
+        wm_loc = f'/tracto/TractoDiff/data/{split}/{sub_id}/{sub_id}-generated_approximated_mask_1mm.nii.gz'
         target = nib.load(wm_loc).get_fdata() #target and exclude are anyway not used in reward calculation
-        exclude = nib.load(f'//tracto/TractoDiff/data/{split}/{sub_id}/mask/{sub_id}__mask_csf.nii.gz').get_fdata()
+        exclude = nib.load(f'/tracto/TractoDiff/data/{split}/{sub_id}/mask/{sub_id}__mask_csf.nii.gz').get_fdata()
 
         env = BaseEnv(dataset_file,
                 wm_loc,
                 sub_id,
                 n_signal= 1,
-                n_dirs = 4,
+                n_dirs = 8,
                 step_size = 0.2,
                 max_angle = 60,
                 min_length = 10,
@@ -120,7 +120,7 @@ def main(bundle: str):
             for l in range(1, strl.shape[0]+1):
                 seg = strl[:l].reshape((1, l, 3))
                 st = env._format_state(seg)
-                st = st.reshape(334,)
+                st = st.reshape(346,)
                 strl_state_list.append(st)
                 
             # states:-

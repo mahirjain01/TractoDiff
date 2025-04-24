@@ -31,3 +31,13 @@ environment/
 
 snapshots/*
 snapshots
+
+/tracto/TractoDiff/data/*
+/tracto/TractoDiff/data
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.tiff

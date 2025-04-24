@@ -182,7 +182,7 @@ class TractographyTrainer:
             self.loss_func = self.loss_func.to(self.device)
 
             y_hat = output_dict["prediction"][0]
-            y_hat_poses = torch.cumsum(y_hat, dim=1) * 10.0
+            y_hat_poses = y_hat
            
             print("The pred is: ", y_hat_poses)
             print("The gt is: ", output_dict["points"][0])

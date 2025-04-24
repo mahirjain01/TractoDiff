@@ -110,7 +110,7 @@ class RNNDiffusion(nn.Module):
         self.out_fc = nn.Sequential(nn.Linear(hidden_dim, 256), nn.LeakyReLU(0.2),
                                         nn.Linear(256, 64), nn.LeakyReLU(0.2),
                                         nn.Linear(64, out_dim), nn.LeakyReLU(0.2))
-                                        
+
         # if self.output_threshold is None:
         #     self.out_fc = nn.Sequential(nn.Linear(hidden_dim, 256), nn.LeakyReLU(0.2),
         #                                 nn.Linear(256, 64), nn.LeakyReLU(0.2),
@@ -150,6 +150,6 @@ class RNNDiffusion(nn.Module):
                 raise Exception("the rnn type is not defined")
             outputs.append(output)
         output_tensor = torch.stack(outputs, dim=0).to(get_device(x_pre.device))  # N x B x 2
-        if self.output_threshold is not None:
-            output_tensor = torch.clip(output_tensor, min=-self.output_threshold, max=self.output_threshold)
+        # if self.output_threshold is not None:
+        #     output_tensor = torch.clip(output_tensor, min=-self.output_threshold, max=self.output_threshold)
         return torch.transpose(output_tensor, dim0=0, dim1=1)  # B x N x 2
