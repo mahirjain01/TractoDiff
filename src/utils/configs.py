@@ -19,6 +19,12 @@ class DataDict:
     targets = "targets"
     trajectories = "trajectories"
 
+    points = "points"
+    condition = "condition"
+
+    subject_id = "subject_id"
+    bundle = "bundle"
+
     target = "target"
     raw_target = "raw_target"
     path = "path"
@@ -80,7 +86,12 @@ Lidar_cfg.angle_range = 200
 DatasetConfig = edict()  # Configuration of data loaders
 DatasetConfig.name = ""
 DatasetConfig.root = "/tracto/TractoDiff/data_sample"
-DatasetConfig.batch_size = 16
+DatasetConfig.bundle = "AF_L"
+DatasetConfig.root_path = "/tracto/TractoDiff/data/"
+DatasetConfig.output_path = "/tracto/TractoDiff/output/"
+DatasetConfig.subjects = ["sub-1030", "sub-1079", "sub-1119"]
+DatasetConfig.seq_length = 16
+DatasetConfig.batch_size = 128
 DatasetConfig.num_workers = 8
 DatasetConfig.shuffle = False
 DatasetConfig.distributed = False
@@ -135,12 +146,14 @@ CRNN.type = CRNNType.gru
 CRNN.waypoint_num = 16
 
 Diffusion = edict()
-Diffusion.beta_start = 0.0001
-Diffusion.beta_end = 0.02
+# Diffusion.beta_start = 0.0001
+# Diffusion.beta_end = 0.02
+Diffusion.beta_start = 0.00005
+Diffusion.beta_end = 0.008
 Diffusion.beta_schedule = "squaredcos_cap_v2"
 Diffusion.clip_sample = True  # default clip range = 1
-Diffusion.clip_sample_range = 1.0  # default clip range = 1
-Diffusion.num_train_timesteps = 100
+Diffusion.clip_sample_range = 0.8  # default clip range = 1
+Diffusion.num_train_timesteps = 250
 Diffusion.variance_type = "fixed_small"
 Diffusion.perception_in = Perception.lidar_out + Perception.vel_out + 2
 Diffusion.diffusion_zd = 512
@@ -152,10 +165,10 @@ Diffusion.diffusion_step_embed_dim = 256
 Diffusion.down_dims = [512, 1024, 2048]
 Diffusion.kernel_size = 5
 Diffusion.cond_predict_scale = True
-Diffusion.use_traversability = True
+Diffusion.use_traversability = False
 Diffusion.estimate_traversability = True
-Diffusion.traversable_steps = 10
-Diffusion.traversable_steps_buffer = 5
+Diffusion.traversable_steps = 15
+Diffusion.traversable_steps_buffer = 8
 Diffusion.n_groups = 8
 Diffusion.model_type = DiffusionModelType.crnn
 Diffusion.use_all_paths = False
@@ -197,10 +210,10 @@ class LossNames:
 
 LossConfig = edict()
 LossConfig.train_poses = True
-LossConfig.scale_waypoints = 1.0
-LossConfig.use_traversability = True
+LossConfig.scale_waypoints = 10.0
+LossConfig.use_traversability = False
 LossConfig.distance_type = Hausdorff.average
-LossConfig.distance_ratio = 10.0
+LossConfig.distance_ratio = 20.0
 LossConfig.last_ratio = 2.0
 LossConfig.vae_kld_ratio = 1.0
 LossConfig.traversability_ratio = 10.0
@@ -211,7 +224,7 @@ LossConfig.root = "/home/jing/Documents/gn/database/datasets/regular_data"
 LossConfig.map_resolution = 0.1
 LossConfig.map_range = 300
 LossConfig.image_separate = 20
-LossConfig.output_dir = "/tracto/DTG/images_2"
+LossConfig.output_dir = "/tracto/TractoDiff/images"
 
 
 #########################################################################
@@ -236,11 +249,11 @@ TrainingConfig = edict()
 TrainingConfig.name = ""
 TrainingConfig.wandb_api = ""
 TrainingConfig.only_model = False
-TrainingConfig.output_dir = "/tracto/DTG/results_2"
+TrainingConfig.output_dir = "/tracto/TractoDiff/output_dir"
 TrainingConfig.snapshot = ""
 TrainingConfig.max_epoch = 150
 TrainingConfig.evaluation_freq = 5
-TrainingConfig.train_time_steps = 32
+TrainingConfig.train_time_steps = 5
 TrainingConfig.scheduler = ScheduleMethods.cosine
 TrainingConfig.lr = 1e-4
 TrainingConfig.weight_decay = 0
@@ -251,9 +264,9 @@ TrainingConfig.lr_min = 1e-7
 TrainingConfig.traversability_threshold = 1e-7
 
 TrainingConfig.gpus = edict()
-TrainingConfig.gpus.channels_last = False
+TrainingConfig.gpus.channels_last = True
 TrainingConfig.gpus.local_rank = 1
-TrainingConfig.gpus.sync_bn = False
+TrainingConfig.gpus.sync_bn = True
 TrainingConfig.gpus.no_ddp_bb = False
 TrainingConfig.gpus.device = "cuda:0"
 

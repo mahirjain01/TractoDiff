@@ -1,6 +1,6 @@
 import nibabel as nib
 
-tractogram_file = '/tracto/Gagan/data/TractoInferno/derivatives/trainset/sub-1030/tractography/sub-1030__AF_L.trk'
+tractogram_file = '//tracto/TractoDiff/data/trainset/sub-1030/tractography/sub-1030__AF_L.trk'
 tractogram = nib.streamlines.load(tractogram_file)
 streamlines = tractogram.streamlines
 

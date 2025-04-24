@@ -16,19 +16,24 @@ class Diffusion(nn.Module):
         self.use_all_paths = cfg.use_all_paths
         self.sample_times = cfg.sample_times
         self.inference_steps = getattr(cfg, 'inference_steps', None)  # Get inference_steps from config or use None
-        self.noise_scheduler = DDIMScheduler(beta_start=cfg.beta_start, beta_end=cfg.beta_end,
+        self.noise_scheduler = DDPMScheduler(beta_start=cfg.beta_start, beta_end=cfg.beta_end,
                                              prediction_type="sample", num_train_timesteps=cfg.num_train_timesteps,
                                              clip_sample_range=cfg.clip_sample_range, clip_sample=cfg.clip_sample,
                                              beta_schedule=cfg.beta_schedule)
         # Initialize scheduler timesteps to None, will be set properly in sample()
         self.noise_scheduler.timesteps = None
         self.time_steps = cfg.num_train_timesteps
-        self.use_traversability = cfg.use_traversability
+        self.use_traversability = False
         self.estimate_traversability = cfg.estimate_traversability
         self.traversable_steps = cfg.traversable_steps
 
-        self.zd = cfg.diffusion_zd
-        self.waypoint_dim = cfg.waypoint_dim
+        # /////////////////////////////////////////////////// CHANGED FOR TRACTO ///////////////////////////////////////////////////
+        self.zd = 512 
+        self.waypoint_dim = 3
+        self.diffusion_step_embed_dim = 256
+        cfg.perception_in = 334 
+        # /////////////////////////////////////////////////// CHANGED FOR TRACTO ///////////////////////////////////////////////////
+        
         self.waypoints_num = cfg.waypoints_num
         if activation_func is None:
             self.encoder = nn.Sequential(nn.Linear(cfg.perception_in, 1024), nn.LeakyReLU(0.1),
@@ -45,7 +50,7 @@ class Diffusion(nn.Module):
         if self.model_type == DiffusionModelType.crnn:
             rnn_threshold = cfg.rnn_output_threshold
             self.diff_model = RNNDiffusion(in_dim=self.waypoint_dim * self.waypoints_num, out_dim=self.waypoint_dim,
-                                           hidden_dim=self.zd, diffusion_step_embed_dim=cfg.diffusion_step_embed_dim,
+                                           hidden_dim=self.zd, diffusion_step_embed_dim=self.diffusion_step_embed_dim,
                                            steps=self.waypoints_num, rnn_type=cfg.rnn_type,
                                            output_threshold=rnn_threshold, activation_func=nn.Softsign)
         elif self.model_type == DiffusionModelType.unet:
@@ -82,6 +87,9 @@ class Diffusion(nn.Module):
         return time_step
 
     def add_trajectory_step_noise(self, trajectory, traversable_step=None):
+
+        # print("use_traversability inside add_trajectory_step_noise:", self.use_traversability)
+
         device = trajectory.device
         # Ensure scheduler is on the right device
         self._ensure_scheduler_on_device(device)
@@ -106,12 +114,16 @@ class Diffusion(nn.Module):
     def forward(self, observation, gt_path=None, traversable_step=None):
         h = self.encoder(observation)  # B x 512
         h_condition = self.trajectory_condition(h)
+
+        # print("The h_condition shape is: ", h_condition.shape)
         output = {}
 
         noisy_trajectory, noise, time_step = self.add_trajectory_step_noise(trajectory=gt_path, traversable_step=traversable_step)
+
         if self.use_traversability:
             h_condition = torch.concat((h_condition, h_condition), dim=0)
         pred = self.diff_model(noisy_trajectory, time_step, local_cond=None, global_cond=h_condition)
+        # print("The pred shape is: ", pred.shape)
         output.update({
             DataDict.prediction: pred,
             DataDict.noise: noise,
@@ -121,6 +133,7 @@ class Diffusion(nn.Module):
 
     @torch.no_grad()
     def sample(self, observation):
+        # print("The observation shape is: ", observation.shape)
         h = self.encoder(observation)  # B x 512
         h_condition = self.trajectory_condition(h)
 

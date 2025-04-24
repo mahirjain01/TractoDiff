@@ -27,7 +27,7 @@ class Loss(nn.Module):
         # self.network = data[DataDict.network]
 
         self.generator_type = cfg.generator_type
-        self.use_traversability = cfg.use_traversability
+        self.use_traversability = False
         self.collision_distance = 0.5
 
         self.target_dis = nn.MSELoss(reduction="mean")
@@ -89,12 +89,12 @@ class Loss(nn.Module):
         ygt = input_dict[DataDict.path]
         y_hat = input_dict[DataDict.prediction]
         y_last = ygt[:, -1, :]
-
+        print(f'y_hat {y_hat}')
         if self.train_poses:
             y_hat_poses = y_hat * self.scale_waypoints
         else:
             y_hat_poses = torch.cumsum(y_hat, dim=1) * self.scale_waypoints
-
+        print(f'y_hat_poses {y_hat_poses}')
         path_dis = self.distance(ygt, y_hat_poses).mean()
         last_pose_dis = self.target_dis(y_last, y_hat_poses[:, -1, :])
         kld_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp()) / y_last.shape[0]
@@ -116,8 +116,12 @@ class Loss(nn.Module):
         return output
 
     def forward_diffusion(self, input_dict):
-        ygt = input_dict[DataDict.path]
+        ygt = input_dict[DataDict.points]
         y_hat = input_dict[DataDict.prediction]
+
+        print("Shape for groundtruth : ", ygt.shape)
+        print("Shape for trajj : ", y_hat.shape)
+        print("Shape for generated traj : ", y_hat_poses.shape)
 
         output = {}
 
@@ -131,10 +135,12 @@ class Loss(nn.Module):
             y_hat_poses = y_hat_poses[:int(B / 2)]
 
         path_dis = self.distance(ygt, y_hat_poses).mean()
-        last_pose_dis = self.target_dis(ygt[:, -1, :], y_hat_poses[:, -1, :])
-        all_loss = self.distance_ratio * path_dis + self.last_ratio * last_pose_dis
+        # last_pose_dis = self.target_dis(ygt[:, -1, :], y_hat_poses[:, -1, :])
+        # all_loss = self.distance_ratio * path_dis + self.last_ratio * last_pose_dis
+        all_loss = self.distance_ratio * path_dis 
+
         output.update({
-            LossNames.last_dis: last_pose_dis,
+            # LossNames.last_dis: last_pose_dis,
             LossNames.path_dis: path_dis,
         })
 
@@ -165,34 +171,41 @@ class Loss(nn.Module):
 
     @torch.no_grad()
     def evaluate(self, input_dict, indices=0):
-        ygt = input_dict[DataDict.path]
+        ygt = input_dict[DataDict.points]
         y_hat = input_dict[DataDict.prediction]
         if self.train_poses:
             y_hat_poses = y_hat * self.scale_waypoints
         else:
             y_hat_poses = torch.cumsum(y_hat, dim=1) * self.scale_waypoints
         
-        print("Shape of groundtruth: ", ygt.shape)
+        # print("Shape of groundtruth: ", ygt.shape)
+        # print("Shape of prediction: ", y_hat.shape)
 
         if self.output_dir is not None:
             all_trajectories = input_dict[DataDict.all_trajectories]
-            local_map = input_dict[DataDict.local_map]
-            for idx in range(len(y_hat_poses)):
-                self.show_path_local_map(trajectory=y_hat_poses[idx].detach().cpu().numpy(),
-                                         gt_path=ygt[idx].detach().cpu().numpy(),
-                                         local_map=local_map[idx].detach().cpu().numpy(), idx=idx, indices=indices)
-                if self.train_poses:
-                    all_trajectories = [t_hat[idx] * self.scale_waypoints for t_hat in all_trajectories]
-                else:
-                    all_trajectories = [np.cumsum(t_hat[idx], axis=0) * self.scale_waypoints for t_hat in all_trajectories]
-                for t_idx in range(len(all_trajectories)):
-                    self.show_path_local_map(trajectory=all_trajectories[t_idx], gt_path=ygt[idx].detach().cpu().numpy(),
-                                             local_map=local_map[idx].detach().cpu().numpy(), idx=t_idx, indices=indices)
+
+            # ////////////////////////////// TRACTO ////////////////////////////
+
+
+            # local_map = input_dict[DataDict.local_map]
+            # for idx in range(len(y_hat_poses)):
+            #     self.show_path_local_map(trajectory=y_hat_poses[idx].detach().cpu().numpy(),
+            #                              gt_path=ygt[idx].detach().cpu().numpy(),
+            #                              local_map=local_map[idx].detach().cpu().numpy(), idx=idx, indices=indices)
+            #     if self.train_poses:
+            #         all_trajectories = [t_hat[idx] * self.scale_waypoints for t_hat in all_trajectories]
+            #     else:
+            #         all_trajectories = [np.cumsum(t_hat[idx], axis=0) * self.scale_waypoints for t_hat in all_trajectories]
+            #     for t_idx in range(len(all_trajectories)):
+            #         self.show_path_local_map(trajectory=all_trajectories[t_idx], gt_path=ygt[idx].detach().cpu().numpy(),
+            #                                  local_map=local_map[idx].detach().cpu().numpy(), idx=t_idx, indices=indices)
+
+            # ////////////////////////////// TRACTO ////////////////////////////
 
             path_dis = self.distance(ygt, y_hat_poses).mean()
-            last_pose_dis = self.target_dis(ygt[:, -1, :], y_hat_poses[:, -1, :])
+            # last_pose_dis = self.target_dis(ygt[:, -1, :], y_hat_poses[:, -1, :])
             output = {
-                LossNames.evaluate_last_dis: last_pose_dis,
+                # LossNames.evaluate_last_dis: last_pose_dis,
                 LossNames.evaluate_path_dis: path_dis,
             }
 
@@ -201,6 +214,7 @@ class Loss(nn.Module):
                 traversability_loss, traversability_values = self._local_collision(yhat=y_hat_poses, local_map=local_map)
                 traversability_loss_mean = traversability_loss.mean()
                 output.update({LossNames.evaluate_traversability: traversability_loss_mean})
+            
             return output
 
     def consistency_loss(self, output_dict, teacher_model=True, num_scales=40):

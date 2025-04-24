@@ -106,14 +106,19 @@ class RNNDiffusion(nn.Module):
             self.rnn = nn.GRUCell(input_size=hidden_dim, hidden_size=hidden_dim, bias=True)
         else:
             raise Exception("the rnn type is not defined")
-        if self.output_threshold is None:
-            self.out_fc = nn.Sequential(nn.Linear(hidden_dim, 256), nn.LeakyReLU(0.2),
+
+        self.out_fc = nn.Sequential(nn.Linear(hidden_dim, 256), nn.LeakyReLU(0.2),
                                         nn.Linear(256, 64), nn.LeakyReLU(0.2),
                                         nn.Linear(64, out_dim), nn.LeakyReLU(0.2))
-        else:
-            self.out_fc = nn.Sequential(nn.Linear(hidden_dim, 256), activation_func(),
-                                        nn.Linear(256, 64), activation_func(),
-                                        nn.Linear(64, out_dim), activation_func())
+                                        
+        # if self.output_threshold is None:
+        #     self.out_fc = nn.Sequential(nn.Linear(hidden_dim, 256), nn.LeakyReLU(0.2),
+        #                                 nn.Linear(256, 64), nn.LeakyReLU(0.2),
+        #                                 nn.Linear(64, out_dim), nn.LeakyReLU(0.2))
+        # else:
+        #     self.out_fc = nn.Sequential(nn.Linear(hidden_dim, 256), activation_func(),
+        #                                 nn.Linear(256, 64), activation_func(),
+        #                                 nn.Linear(64, out_dim), activation_func())
 
     def step_lstm(self, x, h, c):
         h_1, c_1 = self.rnn(x, (h, c))

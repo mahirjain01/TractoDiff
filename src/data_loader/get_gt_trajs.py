@@ -21,7 +21,7 @@ import pickle
 def main(bundle: str):
 
 
-    subs_list = ['sub-1030']
+    subs_list = ['sub-1119']
     print('Generating trajectories')
     # %%
 
@@ -44,7 +44,7 @@ def main(bundle: str):
         return sft
 
 
-    ttoi_path = '/tracto/Gagan/data/TractoInferno/derivatives/'
+    ttoi_path = '//tracto/TractoDiff/data/'
 
     def get_subject_ids(folder, split):
         subjects_path = os.path.join(folder, split)
@@ -54,7 +54,7 @@ def main(bundle: str):
         return subjects_list
 
 
-    splits = ['trainset']
+    splits = ['testset']
     all_subs_dict = {split: get_subject_ids(ttoi_path, split) for split in splits}
 
     def find_key_by_element(dictionary, target_element):
@@ -67,8 +67,8 @@ def main(bundle: str):
 
     for sub_id in subs_list:
         split = find_key_by_element(all_subs_dict, sub_id)
-        tract_fname = f'/tracto/Gagan/data/TractoInferno/derivatives/{split}/{sub_id}/tractography/{sub_id}__{bundle}.trk'
-        ref_anat_fname = f'/tracto/Gagan/data/TractoInferno/derivatives/{split}/{sub_id}/dti/{sub_id}__fa.nii.gz'
+        tract_fname = f'//tracto/TractoDiff/data/{split}/{sub_id}/tractography/{sub_id}__{bundle}.trk'
+        ref_anat_fname = f'//tracto/TractoDiff/data/{split}/{sub_id}/dti/{sub_id}__fa.nii.gz'
         tractogram_voxel_space = get_tractogram_in_voxel_space(tract_fname, ref_anat_fname)
 
         # space check:-
@@ -78,10 +78,10 @@ def main(bundle: str):
         print(f'original trk space: {og_sft.space}')
         print(f'modified trk space: {tractogram_voxel_space.space}')
 
-        dataset_file = f'/tracto/Gagan/data/TractoInferno/derivatives/{split}/{sub_id}/{sub_id}.hdf5'
-        wm_loc = f'/tracto/Gagan/data/TractoInferno/derivatives/{split}/{sub_id}/{sub_id}-generated_approximated_mask_1mm.nii.gz'
+        dataset_file = f'//tracto/TractoDiff/data/{split}/{sub_id}/{sub_id}.hdf5'
+        wm_loc = f'//tracto/TractoDiff/data/{split}/{sub_id}/{sub_id}-generated_approximated_mask.nii.gz'
         target = nib.load(wm_loc).get_fdata() #target and exclude are anyway not used in reward calculation
-        exclude = nib.load(f'/tracto/Gagan/data/TractoInferno/derivatives/{split}/{sub_id}/mask/{sub_id}__mask_csf.nii.gz').get_fdata()
+        exclude = nib.load(f'//tracto/TractoDiff/data/{split}/{sub_id}/mask/{sub_id}__mask_csf.nii.gz').get_fdata()
 
         env = BaseEnv(dataset_file,
                 wm_loc,
@@ -110,7 +110,7 @@ def main(bundle: str):
         dicts_lst = []
 
         for strl in streamlines:
-            traj_dict = {'observations': None, 'next_observations': None, 'length': None}
+            traj_dict = {'observations': None, 'length': None}
             strl_state_list = []
             
             # Store the length (number of points) in the streamline
@@ -127,8 +127,6 @@ def main(bundle: str):
             traj_obs = np.array(strl_state_list)
             traj_dict['observations'] = traj_obs[:-1, :]
             del strl_state_list
-            traj_dict['next_observations'] = traj_obs[1:, :]
-            del traj_obs
             
             dicts_lst.append(traj_dict)
 
