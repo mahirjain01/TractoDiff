@@ -190,6 +190,7 @@ class TractographyTrainer:
             loss_dict = self.loss_func(output_dict)
             output_dict.update(loss_dict)
         else:
+            # For evaluation, pass ground truth for logging purposes
             output_dict = self.model(data_dict, sample=True)
             torch.cuda.empty_cache()
             self.loss_func = self.loss_func.to(self.device)
@@ -225,6 +226,14 @@ class TractographyTrainer:
             print("=" * 110 + "\n")
             
             output_dict.update(eval_dict)
+
+        # For inference, log diffusion model parameters
+        if not self.training and hasattr(self.model, 'generator') and hasattr(self.model.generator, 'sample'):
+            if hasattr(self.model.generator, 'time_steps'):
+                print(f"[DEBUG] Diffusion time_steps: {self.model.generator.time_steps}")
+            if hasattr(self.model.generator, 'sample_times'):
+                print(f"[DEBUG] Diffusion sample_times: {self.model.generator.sample_times}")
+    
             
         return output_dict
 
@@ -461,6 +470,10 @@ class TractographyTrainer:
 
         self.scheduler.step()
 
+        # Plot loss curve after each epoch
+        loss_plot_path = os.path.join(self.output_dir, f'loss_curve_epoch_{self.epoch}.png')
+        self.logger.plot_losses(save_path=loss_plot_path)
+        
         if not self.distributed or (self.distributed and self.current_rank == 0):
             os.makedirs('{}/models'.format(self.output_dir), exist_ok=True)
             self.save_snapshot('{}/models/{}_{}.pth'.format(self.output_dir, self.name, self.epoch))
@@ -470,6 +483,23 @@ class TractographyTrainer:
             # Ensure model and loss function are on correct device
             self._ensure_model_on_device()
             device = self.device
+            
+            # Log model configuration and sampling parameters
+            print("\n===== MODEL EVALUATION CONFIGURATION =====")
+            print(f"Generator type: {self.generator_type}")
+            
+            # Get diffusion parameters
+            if hasattr(self.model.generator, 'sample_times'):
+                print(f"Sample times: {self.model.generator.sample_times}")
+            if hasattr(self.model.generator, 'time_steps'):
+                print(f"Time steps: {self.model.generator.time_steps}")
+            if hasattr(self.model.generator, 'inference_steps'):
+                print(f"Inference steps: {self.model.generator.inference_steps}")
+            
+            # Show model's device and mode
+            print(f"Model device: {next(self.model.parameters()).device}")
+            print(f"Model mode: {'eval' if not self.model.training else 'train'}")
+            print("=========================================\n")
             
             # Move loss function to correct device
             self.loss_func = self.loss_func.to(device)
@@ -522,8 +552,10 @@ class TractographyTrainer:
                     if self.evaluation_freq > 0:
                         self.evaluation_data_loader.sampler.set_epoch(self.epoch)
                 self.run_epoch()
-        
+    
         finally:
-            self.logger.plot_losses()
+            # Create final loss plot with a distinctive name
+            final_plot_path = os.path.join(self.output_dir, f'{self.name}_final_loss_curve.png')
+            self.logger.plot_losses(save_path=final_plot_path)
             self.cleanup()
 

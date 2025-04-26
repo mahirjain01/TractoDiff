@@ -248,8 +248,8 @@ class Loss3D(nn.Module):
                 subject_id = input_dict[DataDict.subject_id][0]
                 bundle = input_dict[DataDict.bundle][0]
 
-                # print("The bundle is: ", bundle)
-
+                # print("The predicted trajectory is: ", y_hat_poses[0])
+                # print("The ground truth trajectory is: ", ygt[0])
                 # Generate 3D visualization of the streamlines
                 for idx in range(len(y_hat_poses)):
                     vis_file = join(self.output_dir, f"streamline_vis_{subject_id}_{bundle}_{indices}_{idx}.png")
@@ -416,6 +416,10 @@ def visualize_3d_streamlines(predictions, ground_truth, subject_id, bundle, spli
     
     # Save or display
     if output_file:
+        # Ensure the directory exists
+        output_dir = os.path.dirname(output_file)
+        if output_dir and not os.path.exists(output_dir):
+            os.makedirs(output_dir)
         plt.savefig(output_file, dpi=200, bbox_inches='tight')
         plt.close(fig)
         return output_file

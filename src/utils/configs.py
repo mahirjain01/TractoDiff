@@ -89,7 +89,7 @@ DatasetConfig.root = "/tracto/TractoDiff/data_sample"
 DatasetConfig.bundle = "AF_L"
 DatasetConfig.root_path = "/tracto/TractoDiff/data/"
 DatasetConfig.output_path = "/tracto/TractoDiff/output/"
-DatasetConfig.subjects = ["sub-1030", "sub-1079", "sub-1119"]
+DatasetConfig.subjects = ["sub-1030", "sub-1119"]
 DatasetConfig.seq_length = 16
 DatasetConfig.batch_size = 128
 DatasetConfig.num_workers = 8
@@ -151,8 +151,9 @@ Diffusion = edict()
 Diffusion.beta_start = 0.00005
 Diffusion.beta_end = 0.008
 Diffusion.beta_schedule = "squaredcos_cap_v2"
-Diffusion.clip_sample = True  # default clip range = 1
-Diffusion.clip_sample_range = 0.8  # default clip range = 1
+Diffusion.clip_sample = False
+# Diffusion.clip_sample = True  # default clip range = 1
+Diffusion.clip_sample_range = 0.7  # default clip range = 1
 Diffusion.num_train_timesteps = 250
 Diffusion.variance_type = "fixed_small"
 Diffusion.perception_in = Perception.lidar_out + Perception.vel_out + 2
@@ -214,7 +215,7 @@ LossConfig.scale_waypoints = 10.0
 LossConfig.use_traversability = False
 LossConfig.distance_type = Hausdorff.average
 LossConfig.distance_ratio = 20.0
-LossConfig.last_ratio = 2.0
+LossConfig.last_ratio = 5.0
 LossConfig.vae_kld_ratio = 1.0
 LossConfig.traversability_ratio = 10.0
 LossConfig.generator_type = ModelConfig.generator_type

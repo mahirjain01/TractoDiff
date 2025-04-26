@@ -21,7 +21,7 @@ import pickle
 def main(bundle: str):
 
 
-    subs_list = ['sub-1079']
+    subs_list = ['sub-1160']
     print('Generating trajectories')
     # %%
 

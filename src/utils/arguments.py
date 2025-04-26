@@ -13,13 +13,13 @@ def get_args():
                         help='only load model to continue training')
     parser.add_argument('--snapshot', type=str, default="", help='snapshot')
     parser.add_argument('--evaluation_freq', type=int, default=1, help="evaluation frequency")
-    parser.add_argument('--train_time_steps', type=int, default=5, help="time steps for training")
-    parser.add_argument('--training_type', type=int, default=1, help="0: 100 epochs; 1: 5 epochs")
+    parser.add_argument('--train_time_steps', type=int, default=16, help="time steps for training")
+    parser.add_argument('--training_type', type=int, default=1, help="0: 100 epochs; 1: 50 epochs")
     parser.add_argument('--debug_output', type=str, default="/tracto/TractoDiff/images", help='snapshot')
 
     # data args:
     parser.add_argument('--data_root', type=str, help='root of the dataset', default="data_sample")
-    parser.add_argument('--batch_size', type=int, default=128, help="the negative number in the same frame")
+    parser.add_argument('--batch_size', type=int, default=64, help="the negative number in the same frame")
     parser.add_argument('--workers', type=int, default=16, help="the worker number in the dataloader")
 
     # model args:
@@ -29,7 +29,7 @@ def get_args():
     parser.add_argument('--train_poses', action='store_true', default=False, help="if train poses or increments")
     parser.add_argument('--use_traversability', action='store_true', default=False, help="if train traversability")
     parser.add_argument('--traversable_steps', type=int, default=10, help="time steps used for traversability training")
-    parser.add_argument('--diffusion_time_steps', type=int, default=100, help="")
+    parser.add_argument('--diffusion_time_steps', type=int, default=200, help="number of diffusion timesteps for training")
 
     # GPUs
     parser.add_argument('--channels-last', action='store_true', default=False, help='Use channels_last memory layout')
@@ -96,11 +96,14 @@ def get_configuration():
     cfg.loss.output_dir = args.debug_output
 
     if args.training_type == 0:
+        # Full training schedule
         cfg.max_epoch = 100
-        cfg.lr_tm = 10
+        cfg.lr = 5e-5
+        cfg.lr_tm = 30  # cosine T_mult
     elif args.training_type == 1:
-        cfg.max_epoch = 50
-        cfg.lr = 2e-5
+        # Short debug run
+        cfg.max_epoch = 5
+        cfg.lr = 5e-5
         cfg.lr_tm = 30
         cfg.lr_min = 1e-8
     else:

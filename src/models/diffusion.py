@@ -67,6 +67,17 @@ class Diffusion(nn.Module):
 
     def _ensure_scheduler_on_device(self, device):
         """Ensure all scheduler tensors are on the same device."""
+        for attr_name in dir(self.noise_scheduler):
+            # Skip internal attributes and methods
+            if attr_name.startswith('_') or callable(getattr(self.noise_scheduler, attr_name)):
+                continue
+            
+            attr = getattr(self.noise_scheduler, attr_name, None)
+            # Check if it's a tensor and move to device if needed
+            if isinstance(attr, torch.Tensor):
+                setattr(self.noise_scheduler, attr_name, attr.to(device))
+            
+        # Explicitly handle common important tensor attributes
         if hasattr(self.noise_scheduler, 'timesteps') and self.noise_scheduler.timesteps is not None:
             self.noise_scheduler.timesteps = self.noise_scheduler.timesteps.to(device)
         if hasattr(self.noise_scheduler, 'alphas_cumprod'):
@@ -137,32 +148,26 @@ class Diffusion(nn.Module):
 
     @torch.no_grad()
     def sample(self, observation):
-        # print("The observation shape is: ", observation.shape)
         h = self.encoder(observation)  # B x 512
         h_condition = self.trajectory_condition(h)
 
         B, C = h_condition.shape
-        device = h_condition.device
-        
         trajectory = torch.randn(size=(h_condition.shape[0], self.waypoints_num, self.waypoint_dim),
-                                 dtype=h_condition.dtype, device=device, generator=None)
+                                 dtype=h_condition.dtype, device=h_condition.device, generator=None)
         all_trajectories = []
         scheduler = self.noise_scheduler
         
-        # DDIM can use fewer steps for inference
-        if self.inference_steps is not None:
-            num_inference_steps = self.inference_steps
-        else:
-            num_inference_steps = min(50, self.time_steps // 10)  # Default to fewer steps
+        # Ensure scheduler tensors are on the correct device
+        self._ensure_scheduler_on_device(h_condition.device)
         
-        # Properly initialize timesteps on the correct device
-        scheduler.set_timesteps(num_inference_steps)
-        # Ensure all scheduler tensors are on the right device
-        self._ensure_scheduler_on_device(device)
-            
+        scheduler.set_timesteps(self.time_steps)
+        # Make sure timesteps are on the same device as the model
+        scheduler.timesteps = scheduler.timesteps.to(h_condition.device)
+        
         for t in scheduler.timesteps:
             if (self.sample_times >= 0) and (t < self.time_steps - 1 - self.sample_times):
                 break
+            t = t.to(h_condition.device)
             model_output = self.diff_model(trajectory, t.unsqueeze(0).repeat(B, ), local_cond=None,
                                            global_cond=h_condition)
             trajectory = scheduler.step(model_output, t, trajectory, generator=None).prev_sample.contiguous()

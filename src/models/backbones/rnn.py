@@ -82,6 +82,8 @@ class RNNDiffusion(nn.Module):
         self.rnn_type = rnn_type
         self.output_threshold = output_threshold
 
+        self.position_embedding = nn.Linear(3, hidden_dim) 
+
         self.diffusion_step_encoder = nn.Sequential(
             SinusoidalPosEmb(diffusion_step_embed_dim),
             nn.Linear(diffusion_step_embed_dim, diffusion_step_embed_dim * 4), nn.Mish(),
@@ -109,7 +111,7 @@ class RNNDiffusion(nn.Module):
 
         self.out_fc = nn.Sequential(nn.Linear(hidden_dim, 256), nn.LeakyReLU(0.2),
                                         nn.Linear(256, 64), nn.LeakyReLU(0.2),
-                                        nn.Linear(64, out_dim), nn.LeakyReLU(0.2))
+                                        nn.Linear(64, out_dim))
 
         # if self.output_threshold is None:
         #     self.out_fc = nn.Sequential(nn.Linear(hidden_dim, 256), nn.LeakyReLU(0.2),
@@ -128,7 +130,9 @@ class RNNDiffusion(nn.Module):
     def step_gru(self, x, h):
         h_1 = self.rnn(x, h)
         output = self.out_fc(h_1)
-        return h_1, output
+        # print("The output is: ", output)
+        # print("The h_1 is: ", h_1)
+        return h_1, output 
 
     def forward(self, noisy_trajectory, time_step, global_cond, local_cond=None):
         global_feature = self.diffusion_step_encoder(time_step)
@@ -137,6 +141,10 @@ class RNNDiffusion(nn.Module):
 
         B, N, C = noisy_trajectory.shape
         x_pre = self.waypoints(noisy_trajectory.view(B, -1))
+
+        initial_position = noisy_trajectory[:, 0, :]
+        position_embedding = self.position_embedding(initial_position)
+        h = h + position_embedding 
 
         c = torch.zeros((B, self.hidden_dim), dtype=torch.float).to(get_device(x_pre.device))
 
@@ -152,4 +160,5 @@ class RNNDiffusion(nn.Module):
         output_tensor = torch.stack(outputs, dim=0).to(get_device(x_pre.device))  # N x B x 2
         # if self.output_threshold is not None:
         #     output_tensor = torch.clip(output_tensor, min=-self.output_threshold, max=self.output_threshold)
+
         return torch.transpose(output_tensor, dim0=0, dim1=1)  # B x N x 2

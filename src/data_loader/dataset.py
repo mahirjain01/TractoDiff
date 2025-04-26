@@ -143,10 +143,13 @@ class TractographyDataset(Dataset):
             self.split = 'trainset'
             self.subjects = cfg.subjects[:-1]
 
-            print("The subjects are ", self.subjects)
+            # print("The subjects are ", self.subjects)
         else:
             self.split = 'testset'
             self.subjects = cfg.subjects[-1:]
+
+        self.split = 'trainset'
+        self.subjects = cfg.subjects[:-1]
 
         self.seq_length = cfg.seq_length
         self.root_path = cfg.root_path
