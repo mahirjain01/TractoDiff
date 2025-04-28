@@ -66,9 +66,7 @@ class TractographyTrainer:
         # Initialize model
         self.model = get_model(config=cfgs.model, device=self.device)
         self.snapshot = cfgs.snapshot
-        if self.snapshot:
-            state_dict = self.load_snapshot(self.snapshot)
-
+        
         # Setup GPU/distributed training
         self.current_rank = 0
         if self.device == torch.device("cpu"):
@@ -118,35 +116,16 @@ class TractographyTrainer:
         else:
             raise ValueError("Unsupported scheduler type")
 
-        if self.snapshot and not cfgs.only_model:
-            self.load_learning_parameters(state_dict)
+        if self.snapshot:
+            print(f"[SNAPSHOT] Attempting to load snapshot from: {self.snapshot}")
+            state_  dict = self.load_snapshot(self.snapshot)
+            print(f"[SNAPSHOT] Loaded snapshot keys: {list(state_dict.keys())}")
+            if not cfgs.only_model:
+                self.load_learning_parameters(state_dict)
 
         # Setup loss function
         self.loss_func = Loss3D(cfg=cfgs.loss)
         self.loss_func = self.loss_func.to(self.device)
-
-        # # Setup datasets
-        # self.training_data_loader = get_dataloader(
-        #     bundle=cfgs.data.bundle,
-        #     subjects=cfgs.data.subjects,
-        #     split='trainset',
-        #     batch_size=cfgs.data.batch_size,
-        #     seq_length=cfgs.data.seq_length,
-        #     shuffle=cfgs.data.shuffle,
-        #     num_workers=cfgs.data.num_workers
-        # )
-        
-        # if self.evaluation_freq > 0:
-        #     self.evaluation_data_loader = get_dataloader(
-        #         bundle=cfgs.data.bundle,
-        #         subjects=cfgs.data.subjects,
-        #         split='trainset',
-        #         batch_size=cfgs.data.batch_size,
-        #         seq_length=cfgs.data.seq_length,
-        #         shuffle=False,
-        #         num_workers=cfgs.data.num_workers
-        #     )
-
 
         # datasets:
         self.training_data_loader = train_data_loader(cfg=cfgs.data)
@@ -306,11 +285,12 @@ class TractographyTrainer:
         Args:
             snapshot: the complete path to the snapshot file
         """
-        print('Loading from "{}".'.format(snapshot))
+        print(f'[SNAPSHOT] Loading from "{snapshot}".')
         state_dict = torch.load(snapshot, map_location=torch.device(self.device))
 
         # Load model
         model_dict = state_dict['state_dict']
+        print(f"[SNAPSHOT] Model state dict keys: {list(model_dict.keys())[:5]} ... (total {len(model_dict)})")
         self.model.load_state_dict(model_dict, strict=False)
 
         # log missing keys and unexpected keys
@@ -319,32 +299,32 @@ class TractographyTrainer:
         missing_keys = model_keys - snapshot_keys
         unexpected_keys = snapshot_keys - model_keys
         if len(missing_keys) > 0:
-            warn('Missing keys: {}'.format(missing_keys))
+            print(f'[SNAPSHOT] Warning: Missing keys: {missing_keys}')
         if len(unexpected_keys) > 0:
-            warn('Unexpected keys: {}'.format(unexpected_keys))
-        print('Model has been loaded.')
+            print(f'[SNAPSHOT] Warning: Unexpected keys: {unexpected_keys}')
+        print('[SNAPSHOT] Model has been loaded.')
         return state_dict
 
     def load_learning_parameters(self, state_dict):
         # Load other attributes
         if 'epoch' in state_dict:
             self.epoch = state_dict['epoch']
-            print('Epoch has been loaded: {}.'.format(self.epoch))
+            print(f'[SNAPSHOT] Epoch has been loaded: {self.epoch}.')
         if 'iteration' in state_dict:
             self.iteration = state_dict['iteration']
-            print('Iteration has been loaded: {}.'.format(self.iteration))
+            print(f'[SNAPSHOT] Iteration has been loaded: {self.iteration}.')
         if 'optimizer' in state_dict and self.optimizer is not None:
             try:
                 self.optimizer.load_state_dict(state_dict['optimizer'])
-                print('Optimizer has been loaded.')
-            except:
-                print("doesn't load optimizer")
+                print('[SNAPSHOT] Optimizer state has been loaded.')
+            except Exception as e:
+                print(f"[SNAPSHOT] Couldn't load optimizer: {e}")
         if 'scheduler' in state_dict and self.scheduler is not None:
             try:
                 self.scheduler.load_state_dict(state_dict['scheduler'])
-                print('Scheduler has been loaded.')
-            except:
-                print("doesn't load scheduler")
+                print('[SNAPSHOT] Scheduler state has been loaded.')
+            except Exception as e:
+                print(f"[SNAPSHOT] Couldn't load scheduler: {e}")
 
     def save_snapshot(self, filename):
         """

@@ -19,6 +19,7 @@ from datetime import datetime, timedelta
 
 from src.utils.configs import TrainingConfig, ScheduleMethods, LossNames, LogNames, LogTypes, DataDict, GeneratorType
 from src.loss import Loss
+from src.loss_3d import Loss3D
 from src.models.model import get_model
 from src.utils.functions import to_device, get_device, release_cuda
 from src.data_loader.data_loader import evaluation_data_loader
@@ -80,9 +81,9 @@ class Inference:
 
         # loss functions
         if self.device == "cuda":
-            self.loss_func = Loss(cfg=cfgs.loss).cuda()
+            self.loss_func = Loss3D(cfg=cfgs.loss).cuda()
         else:
-            self.loss_func = Loss(cfg=cfgs.loss).to(self.device)
+            self.loss_func = Loss3D(cfg=cfgs.loss).to(self.device)
 
         # datasets:
         self.evaluation_data_loader = evaluation_data_loader(cfg=cfgs.data)
@@ -214,34 +215,30 @@ class Inference:
         else:
             self.model = self.model.to(self.device)
         
-    def step(self, data_dict) -> Tuple[dict, dict]:
+    def step(self, data_dict) -> dict:
         """
-        one step of the model, loss function and also the metrics
+        One step of training/evaluation
         Args:
-            data_dict: the input data dictionary
+            data_dict: Dictionary containing:
+                - points: (B, 16, 3) tensor of point sequences
+                - condition: (B, 334) tensor of condition vectors
+            train: Whether this is a training step
         Returns:
-            the output from the model, the output from the loss function
+            Output dictionary containing model outputs and losses
         """
-        # Ensure model is on the correct device
         self._ensure_model_on_device()
+        data_dict = to_device(data_dict, device=self.device)
         
-        # Move data to correct device
-        device = self.device
-        data_dict = to_device(data_dict, device=device)
         
+        # For evaluation, pass ground truth for logging purposes
         output_dict = self.model(data_dict, sample=True)
-        output_dict[DataDict.path] = data_dict[DataDict.path]
-        if DataDict.local_map in data_dict:
-            output_dict[DataDict.local_map] = data_dict[DataDict.local_map]
-
         torch.cuda.empty_cache()
-        # Ensure loss function is on same device
-        self.loss_func = self.loss_func.to(device)
+        self.loss_func = self.loss_func.to(self.device)
         eval_dict = self.loss_func.evaluate(output_dict)
+        
         output_dict.update(eval_dict)
 
         return output_dict
-
 
     def Inference_res(self):
         # Initialize metric accumulators
@@ -249,15 +246,13 @@ class Inference:
             'path_distance': 0.0,
             'last_distance': 0.0,
             'traversability': 0.0 if self.use_traversability else None,
-            'inference_time': 0.0  # New accumulator for inference time
+            'inference_time': 0.0 
         }
         sample_count = 0
         
-        # Ensure model and loss function are on correct device
         self._ensure_model_on_device()
         device = self.device
         
-        # Move loss function to correct device
         self.loss_func = self.loss_func.to(device)
             
         for iteration, data_dict in enumerate(tqdm(self.evaluation_data_loader,
@@ -288,7 +283,7 @@ class Inference:
             
             if iteration == 0:  # Check first batch
                 print("Data shapes:")
-                print(f"Ground truth: {output_dict[DataDict.path].shape}")
+                print(f"Ground truth: {output_dict[DataDict.points].shape}")
                 print(f"Prediction: {output_dict[DataDict.prediction].shape}")
             
             output_dict = release_cuda(output_dict)

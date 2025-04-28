@@ -28,6 +28,7 @@ wandb
 
 data_sample/
 environment/
+data/
 
 snapshots/*
 snapshots

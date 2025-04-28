@@ -17,7 +17,6 @@ from tqdm import tqdm
 from src.utils.configs import DataDict
 from src.utils.functions import inverse_transform
 
-
 @jit(nopython=True)
 def process_single_lidar(line_pts, distance, lidar_horizons, lidar_angle_range, angle_to_idx, lidar_threshold):
     line_values = np.zeros(lidar_horizons)
@@ -34,7 +33,6 @@ def process_single_lidar(line_pts, distance, lidar_horizons, lidar_angle_range, 
                 if line_values[idx] > dis:
                     line_values[idx] = dis
     return line_values
-
 
 class TrainData(Dataset):
     def __init__(self, cfg, train: bool):
@@ -122,7 +120,6 @@ class TrainData(Dataset):
             output_dict.update({DataDict.imu: imu[:self.imu_num]})
         return output_dict
 
-
 class TractographyDataset(Dataset):
     def __init__(self, cfg, train: bool):
         """
@@ -141,15 +138,12 @@ class TractographyDataset(Dataset):
 
         if train: 
             self.split = 'trainset'
-            self.subjects = cfg.subjects[:-1]
+            self.subjects = cfg.subjects[:-2]
 
             # print("The subjects are ", self.subjects)
         else:
             self.split = 'testset'
-            self.subjects = cfg.subjects[-1:]
-
-        self.split = 'trainset'
-        self.subjects = cfg.subjects[:-1]
+            self.subjects = cfg.subjects[-2:]
 
         self.seq_length = cfg.seq_length
         self.root_path = cfg.root_path

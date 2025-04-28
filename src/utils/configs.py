@@ -89,9 +89,9 @@ DatasetConfig.root = "/tracto/TractoDiff/data_sample"
 DatasetConfig.bundle = "AF_L"
 DatasetConfig.root_path = "/tracto/TractoDiff/data/"
 DatasetConfig.output_path = "/tracto/TractoDiff/output/"
-DatasetConfig.subjects = ["sub-1030", "sub-1119"]
+DatasetConfig.subjects = ["sub-1030", "sub-1079", "sub-1159", "sub-1119", "sub-1160"]
 DatasetConfig.seq_length = 16
-DatasetConfig.batch_size = 128
+DatasetConfig.batch_size = 64
 DatasetConfig.num_workers = 8
 DatasetConfig.shuffle = False
 DatasetConfig.distributed = False
@@ -151,8 +151,7 @@ Diffusion = edict()
 Diffusion.beta_start = 0.00005
 Diffusion.beta_end = 0.008
 Diffusion.beta_schedule = "squaredcos_cap_v2"
-Diffusion.clip_sample = False
-# Diffusion.clip_sample = True  # default clip range = 1
+Diffusion.clip_sample = False  # default clip range = 1
 Diffusion.clip_sample_range = 0.7  # default clip range = 1
 Diffusion.num_train_timesteps = 250
 Diffusion.variance_type = "fixed_small"
@@ -251,7 +250,7 @@ TrainingConfig.name = ""
 TrainingConfig.wandb_api = ""
 TrainingConfig.only_model = False
 TrainingConfig.output_dir = "/tracto/TractoDiff/output_dir"
-TrainingConfig.snapshot = ""
+TrainingConfig.snapshot = "/tracto/TractoDiff/output_dir/TractoDiffsnapshot.pth.tar"
 TrainingConfig.max_epoch = 150
 TrainingConfig.evaluation_freq = 5
 TrainingConfig.train_time_steps = 5

@@ -54,7 +54,7 @@ def main(bundle: str):
         return subjects_list
 
 
-    splits = ['trainset']
+    splits = ['testset']
     all_subs_dict = {split: get_subject_ids(ttoi_path, split) for split in splits}
 
     def find_key_by_element(dictionary, target_element):
@@ -98,7 +98,6 @@ def main(bundle: str):
                 compute_reward = True,
                 device= None
             )
-
 
         # %%
         streamlines = tractogram_voxel_space.streamlines
