@@ -214,7 +214,7 @@ LossConfig.scale_waypoints = 10.0
 LossConfig.use_traversability = True
 LossConfig.distance_type = Hausdorff.average
 LossConfig.distance_ratio = 20.0
-LossConfig.last_ratio = 5.0
+LossConfig.last_ratio = 0.0
 LossConfig.vae_kld_ratio = 1.0
 LossConfig.traversability_ratio = 10.0
 LossConfig.generator_type = ModelConfig.generator_type
@@ -224,7 +224,7 @@ LossConfig.root = "/home/jing/Documents/gn/database/datasets/regular_data"
 LossConfig.map_resolution = 0.1
 LossConfig.map_range = 300
 LossConfig.image_separate = 20
-LossConfig.output_dir = "/tracto/TractoDiff/images"
+LossConfig.output_dir = "/tracto/TractoDiff/images_without_traversability"
 
 
 #########################################################################
@@ -249,7 +249,7 @@ TrainingConfig = edict()
 TrainingConfig.name = ""
 TrainingConfig.wandb_api = ""
 TrainingConfig.only_model = False
-TrainingConfig.output_dir = "/tracto/TractoDiff/output_dir"
+TrainingConfig.output_dir = "/tracto/TractoDiff/output_dir_1"
 TrainingConfig.snapshot = ""
 TrainingConfig.max_epoch = 150
 TrainingConfig.evaluation_freq = 5

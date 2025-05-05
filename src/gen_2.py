@@ -224,7 +224,7 @@ class StreamlineGenerator:
         # Generate new streamlines
         generated_streamlines = []
         for i, seed_streamline in enumerate(seed_streamlines[:100]): 
-            print(f"\nGenerating streamline {i+1}/{100}")
+            print(f"Generating streamline {i+1}/{100}")
             streamline_start_time = time.time()
             
             # Use first point as seed
@@ -260,7 +260,7 @@ class StreamlineGenerator:
             Space.RASMM)
         
         # Create new tractogram and save
-        print(f"\nSaving generated streamlines to {args.output_trk}")
+        print(f"Saving generated streamlines to {args.output_trk}")
 
         # reference = get_reference_info(self.seed_img)
         # header = create_tractogram_header(nib.streamlines.TrkFile, *reference)
@@ -271,7 +271,7 @@ class StreamlineGenerator:
 
         save_tractogram(sft, args.output_trk, bbox_valid_check=False) 
        # Create final visualizations
-        print("\nGenerating final visualizations...")
+        print("Generating final visualizations...")
         
         # Stack all generated streamlines for visualization
         all_generated = np.vstack(generated_streamlines)
@@ -302,7 +302,7 @@ class StreamlineGenerator:
         )
         
         # Print timing summary
-        print("\n=== Timing Summary ===")
+        print("=== Timing Summary ===")
         print(f"Total time taken: {total_time:.2f} seconds")
         print(f"Average time per streamline: {np.mean(streamline_times):.2f} seconds")
         print(f"Fastest streamline: {min(streamline_times):.2f} seconds")
@@ -310,7 +310,7 @@ class StreamlineGenerator:
         print(f"Standard deviation: {np.std(streamline_times):.2f} seconds")
         print("=====================")
         
-        print("\nStreamline generation complete!")
+        print("Streamline generation complete!")
         print(f"Generated TRK file saved as: {args.output_trk}")
         print(f"Visualizations saved in: {vis_dir}")
         print("  - predicted_streamlines_vis.png (predicted only)")
@@ -345,3 +345,5 @@ if __name__ == "__main__":
     main() 
 
      
+
+</rewritten_file> 

@@ -177,7 +177,7 @@ class Loss3D(nn.Module):
         path_dis = self.distance(ygt, y_hat_poses).mean()
         mdf_dis = self.mdf_loss(ygt, y_hat_poses).mean()
 
-        final_path_dis = 0.7*path_dis + mdf_dis
+        final_path_dis = path_dis 
         last_pose_dis = self.target_dis(ygt[:, -1, :], y_hat_poses[:, -1, :])
         all_loss = self.distance_ratio * final_path_dis + self.last_ratio * last_pose_dis
         output.update({
@@ -264,7 +264,7 @@ class Loss3D(nn.Module):
 
             path_dis = self.distance(ygt, y_hat_poses).mean()
             mdf_dis = self.mdf_loss(ygt, y_hat_poses).mean()
-            final_path_dis = 0.7*path_dis + 0.3*mdf_dis
+            final_path_dis = 0.3*path_dis + 0.7*mdf_dis
 
             last_pose_dis = self.target_dis(ygt[:, -1, :], y_hat_poses[:, -1, :])
             output = {

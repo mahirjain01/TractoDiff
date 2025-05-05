@@ -308,7 +308,7 @@ class TractographyTrainer:
     def load_learning_parameters(self, state_dict):
         # Load other attributes
         if 'epoch' in state_dict:
-            self.epoch = state_dict['epoch'] + 1 
+            self.epoch = state_dict['epoch'] 
             print(f'[SNAPSHOT] Epoch has been loaded: {self.epoch}.')
         if 'iteration' in state_dict:
             self.iteration = state_dict['iteration']
