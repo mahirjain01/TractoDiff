@@ -1,13 +1,40 @@
-.idea/*
-*/.idea/*
+# Data files
+data/**/*.hdf5
+data/**/*.nii.gz
+data/**/*.nii
 
-build/*
-*/build/*
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-__pycache__/*
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
 
-loginfo/*
-loginfo
+# OS
+.DS_Store
+Thumbs.db
 
 *.pth.tar  
 *.pth
