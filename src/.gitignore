@@ -25,3 +25,13 @@ gpu_logs/*
 /tracto/TractoDiff/build/*
 /tracto/TractoDiff/vg.egg-info/*
 /tracto/TractoDiff/__pycache__/*
+
+
+output_generated/*
+output_dir/*
+/tracto/TractoDiff/output
+/tracto/TractoDiff/output_dir
+/tracto/TractoDiff/output_dir_1
+
+
+/tracto/TractoDiff/visualizations
