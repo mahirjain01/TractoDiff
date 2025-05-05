@@ -23,7 +23,7 @@ class Diffusion(nn.Module):
         # Initialize scheduler timesteps to None, will be set properly in sample()
         self.noise_scheduler.timesteps = None
         self.time_steps = cfg.num_train_timesteps
-        self.use_traversability = False
+        self.use_traversability = True
         self.estimate_traversability = cfg.estimate_traversability
         self.traversable_steps = cfg.traversable_steps
 

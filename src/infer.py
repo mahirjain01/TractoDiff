@@ -87,7 +87,7 @@ class Inference:
 
         # datasets:
         self.evaluation_data_loader = evaluation_data_loader(cfg=cfgs.data)
-
+    
         self.use_traversability = cfgs.loss.use_traversability
         self.generator_type = cfgs.model.generator_type
         self.time_step_loss_buffer = []

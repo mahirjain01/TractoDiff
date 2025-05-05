@@ -5,6 +5,7 @@ import numpy as np
 import nibabel as nib
 import os
 import sys
+import time 
 sys.path.insert(0, '/tracto/TrackToLearn')
 sys.path.insert(0, '/tracto')
 
@@ -62,6 +63,8 @@ def generate_condition_vector(
     np.ndarray
         Condition vector of shape (346,) for the input point
     """
+
+    start_time = time.time()
     
     # Initialize environment with same parameters as original script
     env = BaseEnv(
@@ -86,6 +89,9 @@ def generate_condition_vector(
     
     # Generate condition vector using _format_state
     condition_vector = env._format_state(point)
+
+    end_time = time.time()
+    print(f"Time taken: {end_time - start_time:.2f} seconds")
     
     # Return first (and only) condition vector
     return condition_vector[0]
@@ -129,7 +135,6 @@ def main():
     
     # Print shape and first few values
     print(f"Condition vector shape: {condition_vector.shape}")
-    print(f"First 10 values: {condition_vector[:10]}")
     
     return condition_vector
 

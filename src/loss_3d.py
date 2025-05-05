@@ -34,8 +34,6 @@ class Loss3D(nn.Module):
         self.target_dis = nn.MSELoss(reduction="mean")
         self.distance = HausdorffLoss(mode=cfg.distance_type)
 
-        # self.distance  = MDFLoss()
-
         self.chamfer_loss = ChamferLoss()
         self.pointwise_mse_loss = PointwiseMSELoss()
         self.mdf_loss = MDFLoss()
@@ -177,11 +175,13 @@ class Loss3D(nn.Module):
             ygt = ygt[:half_B]  # to match shape
 
         path_dis = self.distance(ygt, y_hat_poses).mean()
+        mdf_dis = self.mdf_loss(ygt, y_hat_poses).mean()
+
+        final_path_dis = 0.7*path_dis + mdf_dis
         last_pose_dis = self.target_dis(ygt[:, -1, :], y_hat_poses[:, -1, :])
-        all_loss = self.distance_ratio * path_dis + self.last_ratio * last_pose_dis
-        all_loss = path_dis
+        all_loss = self.distance_ratio * final_path_dis + self.last_ratio * last_pose_dis
         output.update({
-            LossNames.path_dis: path_dis,
+            LossNames.path_dis: final_path_dis,
             LossNames.last_dis: last_pose_dis,
         })
 
@@ -244,7 +244,7 @@ class Loss3D(nn.Module):
             all_trajectories = input_dict[DataDict.all_trajectories]
 
             # Visualize 3D streamlines
-            if DataDict.subject_id in input_dict and DataDict.bundle in input_dict:
+            if DataDict.bundle in input_dict:
                 subject_id = input_dict[DataDict.subject_id][0]
                 bundle = input_dict[DataDict.bundle][0]
 
@@ -263,9 +263,12 @@ class Loss3D(nn.Module):
                     )
 
             path_dis = self.distance(ygt, y_hat_poses).mean()
+            mdf_dis = self.mdf_loss(ygt, y_hat_poses).mean()
+            final_path_dis = 0.7*path_dis + 0.3*mdf_dis
+
             last_pose_dis = self.target_dis(ygt[:, -1, :], y_hat_poses[:, -1, :])
             output = {
-                LossNames.evaluate_last_dis: last_pose_dis,
+                LossNames.evaluate_last_dis: final_path_dis,
                 LossNames.evaluate_path_dis: path_dis,
             }
 

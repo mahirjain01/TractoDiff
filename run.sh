@@ -24,3 +24,5 @@ python src/generate_streamlines.py \
     --wm_loc /tracto/TractoDiff/data/testset/sub-1119/sub-1119-generated_approximated_mask_1mm.nii.gz \
     --model_path /tracto/TractoDiff/output_dir/models/TractoDiff_3.pth \
     --output_dir /tracto/TractoDiff/visualizations
+
+

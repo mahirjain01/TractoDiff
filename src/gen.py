@@ -4,9 +4,14 @@ import argparse
 import numpy as np
 import torch
 import nibabel as nib
+
+from nibabel.streamlines.tractogram import LazyTractogram
 from dipy.io.streamline import load_tractogram, save_tractogram
 from dipy.tracking.streamline import Streamlines
 from dipy.tracking.metrics import length, mean_curvature
+from dipy.io.stateful_tractogram import StatefulTractogram, Space
+from dipy.io.utils import (get_reference_info,
+                           create_tractogram_header)
 # from dipy.core.geometry import angle_between_vectors
 import os
 import sys
@@ -19,10 +24,16 @@ sys.path.insert(0, project_root)
 sys.path.insert(0, '/tracto/TrackToLearn')
 sys.path.insert(0, '/tracto')
 
-from src.data_loader.get_condition import generate_condition_vector
 from src.models.model import get_model
 from src.utils.configs import DataDict, TrainingConfig
 from src.loss_3d import Loss3D, visualize_3d_streamlines
+from environments.env import BaseEnv
+
+
+def generate_condition_vector(point: np.ndarray, env: BaseEnv) -> np.ndarray:
+    """Project‑specific function provided by user – do **not** edit."""
+    point = np.asarray(point).reshape(1, 1, 3)
+    return env._format_state(point)[0]
 
 class StreamlineGenerator:
     def __init__(self, cfg: TrainingConfig):
@@ -33,14 +44,10 @@ class StreamlineGenerator:
         self.training = False
         self.output_dir = cfg.output_dir
 
-        # Set up device
-        if cfg.gpus.device == "cuda":
-            self.device = "cuda"
-        else:
-            self.device = torch.device("cpu")
-        
+        self.device = "cuda:1"        
         if isinstance(self.device, str):
             self.device = torch.device(self.device)
+        print("The device is: ", self.device)
             
         # Initialize model
         self.model = get_model(config=cfg.model, device=self.device)
@@ -139,13 +146,7 @@ class StreamlineGenerator:
         
         while True:
             # Generate condition vector for current point
-            condition_vector = generate_condition_vector(
-                point=current_point,
-                subject_id=subject_id,
-                dataset_file=dataset_file,
-                wm_loc=wm_loc,
-                device=self.device
-            )
+            condition_vector = generate_condition_vector(point=current_point,env=self.env)
             
             # Convert to tensor and add batch dimension
             condition_vector = torch.from_numpy(condition_vector).float().unsqueeze(0).to(self.device)
@@ -190,17 +191,36 @@ class StreamlineGenerator:
         self.load_learning_parameters(state_dict)
         self.set_eval_mode()
         self._ensure_model_on_device()
+
+        self.seed_img = nib.load(args.wm_loc)
+
+        self.env = BaseEnv(
+            dataset_file=args.dataset_file,
+            wm_loc=args.wm_loc,
+            subject_id=args.subject,
+            n_signal=1,
+            n_dirs=8,
+            step_size=0.2,
+            max_angle=60,
+            min_length=10,
+            max_length=200,
+            n_seeds_per_voxel=4,
+            rng=np.random.RandomState(1337),
+            add_neighborhood=1.5,
+            compute_reward=True,
+            device=self.device,
+        )
         
         # Load seed streamlines
         print(f"Loading seed streamlines from {args.seed_trk}")
-        seed_tractogram = load_tractogram(args.seed_trk, 'same')
+        seed_tractogram = load_tractogram(args.seed_trk, reference='same', bbox_valid_check=False, to_space=Space.RASMM)
         seed_streamlines = seed_tractogram.streamlines
         print(f"Loaded {len(seed_streamlines)} seed streamlines")
         
         # Initialize timing variables
         total_start_time = time.time()
         streamline_times = []
-        
+          
         # Generate new streamlines
         generated_streamlines = []
         for i, seed_streamline in enumerate(seed_streamlines): 
@@ -228,14 +248,29 @@ class StreamlineGenerator:
         
         # Calculate total time
         total_time = time.time() - total_start_time
+
+        data_per_streamlines = {}
+        # tractogram = LazyTractogram(lambda: generated_streamlines,
+        #                             data_per_streamlines,
+        #                             affine_to_rasmm=self.seed_img.affine)
+
+        sft = StatefulTractogram(
+            Streamlines(generated_streamlines),       # streamlines
+            self.seed_img,                     # same affine as the seed NIfTI
+            Space.RASMM)
         
         # Create new tractogram and save
         print(f"\nSaving generated streamlines to {args.output_trk}")
-        new_tractogram = seed_tractogram
-        new_tractogram.streamlines = Streamlines(generated_streamlines)
-        save_tractogram(new_tractogram, args.output_trk)
-        
-        # Create final visualizations
+
+        # reference = get_reference_info(self.seed_img)
+        # header = create_tractogram_header(nib.streamlines.TrkFile, *reference)
+
+        # new_tractogram = seed_tractogram
+        # new_tractogram.streamlines = Streamlines(generated_streamlines)
+        # nib.streamlines.save(tractogram, args.output_trk, header=header)
+
+        save_tractogram(sft, args.output_trk, bbox_valid_check=False) 
+       # Create final visualizations
         print("\nGenerating final visualizations...")
         
         # Stack all generated streamlines for visualization
@@ -308,3 +343,5 @@ def main():
 
 if __name__ == "__main__":
     main() 
+
+     
