@@ -22,7 +22,7 @@ from src.loss import Loss
 from src.loss_3d import Loss3D
 from src.models.model import get_model
 from src.utils.functions import to_device, get_device, release_cuda
-from src.data_loader.data_loader import evaluation_data_loader
+from src.data_loader.dataset_tracto import train_data_loader, evaluation_data_loader
 
 
 class Inference:
@@ -34,11 +34,11 @@ class Inference:
         self.iteration = 0
         self.epoch = 0
         self.training = False
-        self.output_dir = cfgs.output_dir
+        self.output_dir = "/tracto/TractoDiff/output_dir_1/metrics"
 
         # set up gpus
         if cfgs.gpus.device == "cuda":
-            self.device = "cuda"
+            self.device = "cuda:0"
         else:
             self.device = get_device(device=cfgs.gpus.device)
         
@@ -55,7 +55,7 @@ class Inference:
 
         # model
         self.model = get_model(config=cfgs.model, device=self.device)
-        self.snapshot = cfgs.snapshot
+        self.snapshot = "/tracto/TractoDiff/output_dir_1/TractoDiffsnapshot.pth.tar"
         if self.snapshot:
             state_dict = self.load_snapshot(self.snapshot)
 

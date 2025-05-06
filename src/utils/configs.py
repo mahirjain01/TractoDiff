@@ -224,7 +224,7 @@ LossConfig.root = "/home/jing/Documents/gn/database/datasets/regular_data"
 LossConfig.map_resolution = 0.1
 LossConfig.map_range = 300
 LossConfig.image_separate = 20
-LossConfig.output_dir = "/tracto/TractoDiff/images_without_traversability"
+LossConfig.output_dir = "/tracto/TractoDiff/images"
 
 
 #########################################################################

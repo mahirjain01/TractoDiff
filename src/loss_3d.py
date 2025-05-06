@@ -177,7 +177,7 @@ class Loss3D(nn.Module):
         path_dis = self.distance(ygt, y_hat_poses).mean()
         mdf_dis = self.mdf_loss(ygt, y_hat_poses).mean()
 
-        final_path_dis = path_dis 
+        final_path_dis = mdf_dis 
         last_pose_dis = self.target_dis(ygt[:, -1, :], y_hat_poses[:, -1, :])
         all_loss = self.distance_ratio * final_path_dis + self.last_ratio * last_pose_dis
         output.update({
@@ -187,7 +187,7 @@ class Loss3D(nn.Module):
 
         if self.use_traversability:
             sub_id = subject_id
-            wm_mask_path = f"/tracto/TractoDiff/data/trainset/{sub_id}/{sub_id}-generated_approximated_mask_1mm.nii.gz"
+            wm_mask_path = f"/tracto/TractoDiff/data/trainset/{sub_id}/{sub_id}-generated_approximated_mask.nii.gz"
             
             if not os.path.exists(wm_mask_path):
                 raise FileNotFoundError(f"WM mask not found at {wm_mask_path}")
@@ -264,17 +264,17 @@ class Loss3D(nn.Module):
 
             path_dis = self.distance(ygt, y_hat_poses).mean()
             mdf_dis = self.mdf_loss(ygt, y_hat_poses).mean()
-            final_path_dis = 0.3*path_dis + 0.7*mdf_dis
+            final_path_dis = mdf_dis
 
             last_pose_dis = self.target_dis(ygt[:, -1, :], y_hat_poses[:, -1, :])
             output = {
-                LossNames.evaluate_last_dis: final_path_dis,
-                LossNames.evaluate_path_dis: path_dis,
+                LossNames.evaluate_last_dis: last_pose_dis,
+                LossNames.evaluate_path_dis: final_path_dis,
             }
 
             if self.use_traversability:
                 subject_id = input_dict[DataDict.subject_id][0]
-                wm_mask_path = f"/tracto/TractoDiff/data/testset/{subject_id}/{subject_id}-generated_approximated_mask_1mm.nii.gz"
+                wm_mask_path = f"/tracto/TractoDiff/data/testset/{subject_id}/{subject_id}-generated_approximated_mask.nii.gz"
 
                 wm_nifti = nib.load(wm_mask_path)
                 wm_data = wm_nifti.get_fdata()

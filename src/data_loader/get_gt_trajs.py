@@ -79,7 +79,7 @@ def main(bundle: str):
         print(f'modified trk space: {tractogram_voxel_space.space}')
 
         dataset_file = f'/tracto/TractoDiff/data/{split}/{sub_id}/{sub_id}.hdf5'
-        wm_loc = f'/tracto/TractoDiff/data/{split}/{sub_id}/{sub_id}-generated_approximated_mask_1mm.nii.gz'
+        wm_loc = f'/tracto/TractoDiff/data/{split}/{sub_id}/{sub_id}-generated_approximated_mask.nii.gz'
         target = nib.load(wm_loc).get_fdata() #target and exclude are anyway not used in reward calculation
         exclude = nib.load(f'/tracto/TractoDiff/data/{split}/{sub_id}/mask/{sub_id}__mask_csf.nii.gz').get_fdata()
 

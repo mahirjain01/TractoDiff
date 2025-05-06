@@ -551,7 +551,7 @@ class StreamlineGenerator:
             print(f"Saving predicted streamlines visualization ({num_vis} streamlines) to {pred_vis_file}")
             visualize_3d_streamlines(
                 predictions=all_generated_vis,
-                ground_truth=None, # Set ground_truth to None or same as predictions
+                ground_truth=all_generated_vis, # Set ground_truth to None or same as predictions
                 subject_id=args.subject,
                 bundle=args.bundle,
                 split="testset",

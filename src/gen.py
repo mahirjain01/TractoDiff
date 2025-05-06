@@ -273,16 +273,21 @@ class StreamlineGenerator:
        # Create final visualizations
         print("\nGenerating final visualizations...")
         
-        # Stack all generated streamlines for visualization
-        all_generated = np.vstack(generated_streamlines)
-        all_ground_truth = np.vstack(seed_streamlines)  # Match the number of generated streamlines
+        # Sample a subset of streamlines for visualization (e.g., first 500)
+        num_vis_streamlines = min(500, len(generated_streamlines))
+        vis_generated = generated_streamlines[:num_vis_streamlines]
+        vis_ground_truth = seed_streamlines[:num_vis_streamlines]
+        
+        # Convert to numpy arrays for visualization
+        vis_generated = np.array(vis_generated)
+        vis_ground_truth = np.array(vis_ground_truth)
         
         # 1. Plot of only predicted streamlines
         pred_vis_file = os.path.join(vis_dir, "predicted_streamlines_vis.png")
-        print(f"Saving predicted streamlines visualization to {pred_vis_file}")
+        print(f"Saving predicted streamlines visualization ({num_vis_streamlines} streamlines) to {pred_vis_file}")
         visualize_3d_streamlines(
-            predictions=all_generated,
-            ground_truth=all_generated,  # Use same data for both to show only predictions
+            predictions=vis_generated,
+            ground_truth=vis_generated,  # Use same data for both to show only predictions
             subject_id=args.subject,
             bundle=args.bundle,
             split="testset",
@@ -293,8 +298,8 @@ class StreamlineGenerator:
         comp_vis_file = os.path.join(vis_dir, "comparison_streamlines_vis.png")
         print(f"Saving comparison visualization to {comp_vis_file}")
         visualize_3d_streamlines(
-            predictions=all_generated,
-            ground_truth=all_ground_truth,
+            predictions=vis_generated,
+            ground_truth=vis_ground_truth,
             subject_id=args.subject,
             bundle=args.bundle,
             split="testset",
