@@ -20,6 +20,8 @@ loginfo
 *.webp
 *.pkl
 
+*.trk
+*.trk.gz
 wandb/*
 wandb
 
@@ -42,3 +44,6 @@ snapshots
 *.gif
 *.bmp
 *tiff
+
+
+/tracto/TractoDiff/visualizations
