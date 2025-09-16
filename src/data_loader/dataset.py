@@ -138,9 +138,8 @@ class TractographyDataset(Dataset):
 
         if train: 
             self.split = 'trainset'
-            self.subjects = cfg.subjects[:-3]
-
-            # print("The subjects are ", self.subjects)
+            self.subjects = cfg.subjects[-1:]
+            print("The subjects are ", self.subjects)
         else:
             self.split = 'testset'
             self.subjects = cfg.subjects[-1:]

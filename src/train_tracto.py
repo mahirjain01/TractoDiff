@@ -20,7 +20,6 @@ from src.models.model import get_model
 from src.utils.functions import to_device, get_device, release_cuda
 
 from src.utils.logger import TrainingLogger
-# from src.data_loader.dataset_tracto import TractographyDataset, get_dataloader
 from src.data_loader.dataset_tracto import train_data_loader, evaluation_data_loader
 
 
@@ -36,7 +35,7 @@ class TractographyTrainer:
         self.evaluation_freq = cfgs.evaluation_freq
         self.train_time_steps = cfgs.train_time_steps
 
-        self.output_dir = "/tracto/TractoDiff/logs"
+        self.output_dir = "/med/TractoDiff/logs"
 
         self.iteration = 0
         self.epoch = 0

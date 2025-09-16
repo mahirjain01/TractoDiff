@@ -37,7 +37,7 @@ def main():
     """
     # Define the path to the pickle file
     # IMPORTANT: Ensure this path is correct for your system
-    file_path = '/tracto/TractoDiff/data_sample/data_folder/0_2.pkl' # Example path
+    file_path = '/med/TractoDiff/data/0_2.pkl' # Example path
 
     try:
         # Open the file in binary read mode

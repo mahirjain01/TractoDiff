@@ -1,6 +1,5 @@
 import torch
 
-from src.train import Trainer
 from src.train_tracto import TractographyTrainer
 from src.utils.arguments import get_configuration
 

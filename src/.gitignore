@@ -19,26 +19,26 @@ libs/*
 gpu_logs/*
 ./gpu_logs/*
 
-/tracto/TractoDiff/gpu_logs/*
-/tracto/TractoDiff/results/*
-/tracto/TractoDiff/libs/*
-/tracto/TractoDiff/build/*
-/tracto/TractoDiff/vg.egg-info/*
-/tracto/TractoDiff/__pycache__/*
+/med/TractoDiff/gpu_logs/*
+/med/TractoDiff/results/*
+/med/TractoDiff/libs/*
+/med/TractoDiff/build/*
+/med/TractoDiff/vg.egg-info/*
+/med/TractoDiff/__pycache__/*
 
-/tracto/TractoDiff/environment
+/med/TractoDiff/environment
 
 output_generated/*
 output_dir/*
-/tracto/TractoDiff/output
-/tracto/TractoDiff/output_dir
-/tracto/TractoDiff/output_dir_1
+/med/TractoDiff/output
+/med/TractoDiff/output_dir
+/med/TractoDiff/output_dir_1
 
-/tracto/TractoDiff/data
+/med/TractoDiff/data
 
-/tracto/TractoDiff/visualizations
+/med/TractoDiff/visualizations
 
-/tracto/TractoDiff/images
+/med/TractoDiff/images
 *.png
 *.pth
 *.pth.tar

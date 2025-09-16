@@ -35,8 +35,8 @@ data/
 snapshots/*
 snapshots
 
-/tracto/TractoDiff/data/*
-/tracto/TractoDiff/data
+/med/TractoDiff/data/*
+/med/TractoDiff/data
 *.pdf
 *.png
 *.jpg
@@ -46,4 +46,4 @@ snapshots
 *tiff
 
 
-/tracto/TractoDiff/visualizations
+/med/TractoDiff/visualizations

@@ -175,11 +175,23 @@ class Loss3D(nn.Module):
             ygt = ygt[:half_B]  # to match shape
 
         path_dis = self.distance(ygt, y_hat_poses).mean()
-        mdf_dis = self.mdf_loss(ygt, y_hat_poses).mean()
+        final_path_dis = path_dis
 
-        final_path_dis = mdf_dis 
+        # Calculate sum of distances between consecutive points in y_hat_poses
+        point_diffs = y_hat_poses[:, 1:, :] - y_hat_poses[:, :-1, :]
+        segment_lengths = torch.norm(point_diffs, p=2, dim=2)
+        total_segment_length_per_path = torch.sum(segment_lengths, dim=1)
+        mean_total_segment_length = total_segment_length_per_path.mean()
+        
         last_pose_dis = self.target_dis(ygt[:, -1, :], y_hat_poses[:, -1, :])
-        all_loss = self.distance_ratio * final_path_dis + self.last_ratio * last_pose_dis
+        # first_pose_dis = self.target_dis(ygt[:, 0, :], y_hat_poses[:, 0, :])
+
+        all_points_mse = self.target_dis(ygt, y_hat_poses)
+        all_points_mse_mean = all_points_mse.mean()
+
+        # all_loss = self.distance_ratio * final_path_dis + 2.0 * last_pose_dis + 2.0 * all_points_mse_mean + 10.0 * mean_total_segment_length
+
+        all_loss = self.distance_ratio * path_dis +  2.0 * last_pose_dis + 20.0 * mean_total_segment_length
         output.update({
             LossNames.path_dis: final_path_dis,
             LossNames.last_dis: last_pose_dis,
@@ -187,7 +199,7 @@ class Loss3D(nn.Module):
 
         if self.use_traversability:
             sub_id = subject_id
-            wm_mask_path = f"/tracto/TractoDiff/data/trainset/{sub_id}/{sub_id}-generated_approximated_mask.nii.gz"
+            wm_mask_path = f"/med/TractoDiff/data/trainset/{sub_id}/{sub_id}-generated_approximated_mask.nii.gz"
             
             if not os.path.exists(wm_mask_path):
                 raise FileNotFoundError(f"WM mask not found at {wm_mask_path}")
@@ -227,18 +239,7 @@ class Loss3D(nn.Module):
     def evaluate(self, input_dict, indices=0):
         ygt = input_dict[DataDict.points]
         y_hat = input_dict[DataDict.prediction]
-
         y_hat_poses = y_hat
-
-        # if self.train_poses:
-        #     y_hat_poses = y_hat * self.scale_waypoints
-        # else:
-        #     y_hat_poses = torch.cumsum(y_hat, dim=1) * self.scale_waypoints
-
-        # print("y_hat is: ", y_hat[0])
-        # print("y_hat_poses is: ", y_hat_poses[0])
-        # print("Shape of groundtruth: ", ygt.shape)
-        # print("Shape of prediction: ", y_hat.shape)
 
         if self.output_dir is not None:
             all_trajectories = input_dict[DataDict.all_trajectories]
@@ -248,9 +249,6 @@ class Loss3D(nn.Module):
                 subject_id = input_dict[DataDict.subject_id][0]
                 bundle = input_dict[DataDict.bundle][0]
 
-                # print("The predicted trajectory is: ", y_hat_poses[0])
-                # print("The ground truth trajectory is: ", ygt[0])
-                # Generate 3D visualization of the streamlines
                 for idx in range(len(y_hat_poses)):
                     vis_file = join(self.output_dir, f"streamline_vis_{subject_id}_{bundle}_{indices}_{idx}.png")
                     visualize_3d_streamlines(
@@ -263,10 +261,10 @@ class Loss3D(nn.Module):
                     )
 
             path_dis = self.distance(ygt, y_hat_poses).mean()
-            mdf_dis = self.mdf_loss(ygt, y_hat_poses).mean()
-            final_path_dis = mdf_dis
+            final_path_dis = path_dis
 
             last_pose_dis = self.target_dis(ygt[:, -1, :], y_hat_poses[:, -1, :])
+            first_pose_dis = self.target_dis(ygt[:, 0, :], y_hat_poses[:, 0, :])
             output = {
                 LossNames.evaluate_last_dis: last_pose_dis,
                 LossNames.evaluate_path_dis: final_path_dis,
@@ -274,7 +272,7 @@ class Loss3D(nn.Module):
 
             if self.use_traversability:
                 subject_id = input_dict[DataDict.subject_id][0]
-                wm_mask_path = f"/tracto/TractoDiff/data/testset/{subject_id}/{subject_id}-generated_approximated_mask.nii.gz"
+                wm_mask_path = f"/med/TractoDiff/data/testset/{subject_id}/{subject_id}-generated_approximated_mask.nii.gz"
 
                 wm_nifti = nib.load(wm_mask_path)
                 wm_data = wm_nifti.get_fdata()
@@ -338,9 +336,9 @@ def visualize_3d_streamlines(predictions, ground_truth, subject_id, bundle, spli
     
     # Load original tractogram if not provided
     if context_tractogram is None:
-        tract_path = f"/tracto/TractoDiff/data/{split}/{subject_id}/tractography/{subject_id}__{bundle}.trk"
+        tract_path = f"/med/TractoDiff/data/{split}/{subject_id}/tractography/{subject_id}__{bundle}.trk"
 
-        # "/tracto/TractoDiff/data/trainset/sub-1030/tractography/sub-1030__AF_L.trk"
+        # "/med/TractoDiff/data/trainset/sub-1030/tractography/sub-1030__AF_L.trk"
         if os.path.exists(tract_path):
             try:
                 tractogram = nib.streamlines.load(tract_path)

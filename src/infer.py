@@ -34,7 +34,7 @@ class Inference:
         self.iteration = 0
         self.epoch = 0
         self.training = False
-        self.output_dir = "/tracto/TractoDiff/output_dir_1/metrics"
+        self.output_dir = "/med/TractoDiff/output_dir_1/metrics"
 
         # set up gpus
         if cfgs.gpus.device == "cuda":
@@ -55,7 +55,7 @@ class Inference:
 
         # model
         self.model = get_model(config=cfgs.model, device=self.device)
-        self.snapshot = "/tracto/TractoDiff/output_dir_1/TractoDiffsnapshot.pth.tar"
+        self.snapshot = "/med/TractoDiff/output_dir_1/TractoDiffsnapshot.pth.tar"
         if self.snapshot:
             state_dict = self.load_snapshot(self.snapshot)
 

@@ -10,10 +10,20 @@ import numpy as np
 import nibabel as nib
 import os
 import sys
-sys.path.insert(0, '/tracto/TrackToLearn')
-sys.path.insert(0, '/tracto')
 
-# Try direct imports from the files
+
+import time
+from warnings import warn
+from tqdm import tqdm 
+# Add the TrackToLearn directory to sys.path
+tracktolearn_root = '/med/TrackToLearn'
+sys.path.insert(0, tracktolearn_root)  # Add parent directory
+sys.path.insert(0, os.path.join(tracktolearn_root, 'TrackToLearn'))  # Add TrackToLearn package
+
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
+sys.path.insert(0, '/med') 
+
 from environments.env import BaseEnv
 from environments.reward import reward_streamlines_step
 import pickle
@@ -21,7 +31,7 @@ import pickle
 def main(bundle: str):
 
 
-    subs_list = ['sub-1160']
+    subs_list = ['sub-1061']
     print('Generating trajectories')
     # %%
 
@@ -44,7 +54,7 @@ def main(bundle: str):
         return sft
 
 
-    ttoi_path = '/tracto/TractoDiff/data/'
+    ttoi_path = '/med/TractoDiff/data/'
 
     def get_subject_ids(folder, split):
         subjects_path = os.path.join(folder, split)
@@ -67,8 +77,8 @@ def main(bundle: str):
 
     for sub_id in subs_list:
         split = find_key_by_element(all_subs_dict, sub_id)
-        tract_fname = f'/tracto/TractoDiff/data/{split}/{sub_id}/tractography/{sub_id}__{bundle}.trk'
-        ref_anat_fname = f'/tracto/TractoDiff/data/{split}/{sub_id}/dti/{sub_id}__fa.nii.gz'
+        tract_fname = f'/med/TractoDiff/data/{split}/{sub_id}/tractography/{sub_id}__{bundle}.trk'
+        ref_anat_fname = f'/med/TractoDiff/data/{split}/{sub_id}/dti/{sub_id}__fa.nii.gz'
         tractogram_voxel_space = get_tractogram_in_voxel_space(tract_fname, ref_anat_fname)
 
         # space check:-
@@ -78,10 +88,10 @@ def main(bundle: str):
         print(f'original trk space: {og_sft.space}')
         print(f'modified trk space: {tractogram_voxel_space.space}')
 
-        dataset_file = f'/tracto/TractoDiff/data/{split}/{sub_id}/{sub_id}.hdf5'
-        wm_loc = f'/tracto/TractoDiff/data/{split}/{sub_id}/{sub_id}-generated_approximated_mask.nii.gz'
+        dataset_file = f'/med/TractoDiff/data/{split}/{sub_id}/{sub_id}.hdf5'
+        wm_loc = f'/med/TractoDiff/data/{split}/{sub_id}/{sub_id}-generated_approximated_mask.nii.gz'
         target = nib.load(wm_loc).get_fdata() #target and exclude are anyway not used in reward calculation
-        exclude = nib.load(f'/tracto/TractoDiff/data/{split}/{sub_id}/mask/{sub_id}__mask_csf.nii.gz').get_fdata()
+        exclude = nib.load(f'/med/TractoDiff/data/{split}/{sub_id}/mask/{sub_id}__mask_csf.nii.gz').get_fdata()
 
         env = BaseEnv(dataset_file,
                 wm_loc,
@@ -133,9 +143,9 @@ def main(bundle: str):
         #%%
 
         # Saving pkl:-
-        if not os.path.exists(f'/tracto/TractoDiff/output/{bundle}'):
-            os.makedirs(f'/tracto/TractoDiff/output/{bundle}')
-        save_loc = f'/tracto/TractoDiff/output/{bundle}/{sub_id}.pkl'
+        if not os.path.exists(f'/med/TractoDiff/output/{bundle}'):
+            os.makedirs(f'/med/TractoDiff/output/{bundle}')
+        save_loc = f'/med/TractoDiff/output/{bundle}/{sub_id}.pkl'
         
         with open(save_loc, 'wb') as file:
             print("observations shape:", dicts_lst[0]['observations'].shape)

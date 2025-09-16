@@ -130,6 +130,10 @@ class Diffusion(nn.Module):
         h = self.encoder(observation)  # B x 512
         h_condition = self.trajectory_condition(h)
 
+        print("The value for h is: ", h)
+        print("The h_condition shape is: ", h_condition.shape)
+        print("The h shape is: ", h.shape)
+
         # print("The h_condition shape is: ", h_condition.shape)
         output = {}
 

@@ -86,7 +86,7 @@ class RNNDiffusion(nn.Module):
 
         self.diffusion_step_encoder = nn.Sequential(
             SinusoidalPosEmb(diffusion_step_embed_dim),
-            nn.Linear(diffusion_step_embed_dim, diffusion_step_embed_dim * 4), nn.Mish(),
+            nn.Linear(diffusion_step_embed_dim, diffusion_step_embed_dim * 4), 
             nn.Linear(diffusion_step_embed_dim * 4, diffusion_step_embed_dim),
         )
         cond_dim = diffusion_step_embed_dim + hidden_dim

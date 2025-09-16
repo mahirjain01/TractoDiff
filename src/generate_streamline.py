@@ -10,12 +10,16 @@ import time
 from warnings import warn
 from tqdm import tqdm # Add tqdm for progress bars
 
+# Add the TrackToLearn directory to sys.path
+tracktolearn_root = '/med/TrackToLearn'
+sys.path.insert(0, tracktolearn_root)  # Add parent directory
+sys.path.insert(0, os.path.join(tracktolearn_root, 'TrackToLearn'))  # Add TrackToLearn package
+
 # --- Add project paths (keep as is or adjust if needed) ---
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 # Add other necessary paths if they are not relative to the project root
-sys.path.insert(0, '/tracto/TrackToLearn') # Example path
-sys.path.insert(0, '/tracto')            # Example path
+sys.path.insert(0, '/med')            # Example path
 # --- End Add project paths ---
 
 # --- Imports from dependencies ---
@@ -152,7 +156,6 @@ class StreamlineGenerator:
             print(f"Error loading snapshot: {e}")
             sys.exit(1)
 
-
     def load_learning_parameters(self, state_dict):
         """ Load epoch/iteration info from the snapshot if available. """
         if 'epoch' in state_dict:
@@ -186,7 +189,6 @@ class StreamlineGenerator:
              # If model has no parameters or device cannot be determined, try moving it anyway
             print(f"Attempting to ensure model is on {self.device}.")
             self.model.to(self.device)
-
 
     def load_wm_mask(self, wm_loc):
         """Load white matter mask from NIFTI file."""
@@ -271,7 +273,7 @@ class StreamlineGenerator:
         return terminate
 
 
-    def generate_streamlines_batch(self, seed_points_batch, subject_id, bundle, dataset_file, wm_mask, wm_affine, max_steps=200, max_segment_points=1):
+    def generate_streamlines_batch(self, seed_points_batch, subject_id, bundle, dataset_file, wm_mask, wm_affine, max_steps=75, max_segment_points=16):
         """
         Generate a batch of streamlines starting from seed points using batched inference.
 
@@ -487,7 +489,7 @@ class StreamlineGenerator:
                 wm_mask=wm_mask,
                 wm_affine=wm_affine,
                 max_steps=max_model_steps,
-                max_segment_points=self.cfg.model.get('points_per_segment', 1) # Get expected segment length from config if possible
+                max_segment_points=self.cfg.model.get('points_per_segment', 16) # Get expected segment length from config if possible
             )
 
             generated_streamlines_all.extend(generated_batch)
@@ -554,7 +556,7 @@ class StreamlineGenerator:
                 ground_truth=all_generated_vis, # Set ground_truth to None or same as predictions
                 subject_id=args.subject,
                 bundle=args.bundle,
-                split="testset",
+                split="trainset",
                 output_file=pred_vis_file
             )
 
@@ -566,7 +568,7 @@ class StreamlineGenerator:
                 ground_truth=all_ground_truth_vis,
                 subject_id=args.subject,
                 bundle=args.bundle,
-                split="testset", 
+                split="trainset", 
                 output_file=comp_vis_file
             )
             print("Visualizations saved.")
@@ -611,12 +613,12 @@ def main():
     parser.add_argument("--model_path", type=str, required=True, help="Path to trained model checkpoint (.pth or similar)")
 
     # Optimization arguments
-    parser.add_argument("--batch_size", type=int, default=128, help="Number of streamlines to process in parallel per batch")
+    parser.add_argument("--batch_size", type=int, default=256, help="Number of streamlines to process in parallel per batch")
     parser.add_argument("--device", type=str, default="cuda:0", help="Compute device (e.g., 'cuda:0', 'cuda:1', 'cpu')")
     parser.add_argument("--use_amp", action='store_true', help="Enable Automatic Mixed Precision (AMP) for potentially faster inference on compatible GPUs")
 
     # Generation control arguments
-    parser.add_argument("--num_streamlines", type=int, default=-1, help="Maximum number of streamlines to generate (-1 to use all seeds from seed_trk)")
+    parser.add_argument("--num_streamlines", type=int, default=1000, help="Maximum number of streamlines to generate (-1 to use all seeds from seed_trk)")
     parser.add_argument("--max_steps", type=int, default=200, help="Maximum number of generation steps (segments) per streamline")
 
     # Output arguments

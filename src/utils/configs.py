@@ -85,11 +85,11 @@ Lidar_cfg.angle_range = 200
 
 DatasetConfig = edict()  # Configuration of data loaders
 DatasetConfig.name = ""
-DatasetConfig.root = "/tracto/TractoDiff/data_sample"
+DatasetConfig.root = "/med/TractoDiff/data_sample"
 DatasetConfig.bundle = "AF_L"
-DatasetConfig.root_path = "/tracto/TractoDiff/data/"
-DatasetConfig.output_path = "/tracto/TractoDiff/output/"
-DatasetConfig.subjects = ["sub-1030", "sub-1079", "sub-1159", "sub-1119"]
+DatasetConfig.root_path = "/med/TractoDiff/data"
+DatasetConfig.output_path = "/med/TractoDiff/data/WMmasks"
+DatasetConfig.subjects = ["sub-1061"]
 DatasetConfig.seq_length = 16
 DatasetConfig.batch_size = 64
 DatasetConfig.num_workers = 8
@@ -214,7 +214,7 @@ LossConfig.scale_waypoints = 10.0
 LossConfig.use_traversability = True
 LossConfig.distance_type = Hausdorff.average
 LossConfig.distance_ratio = 20.0
-LossConfig.last_ratio = 0.0
+LossConfig.last_ratio = 2.0
 LossConfig.vae_kld_ratio = 1.0
 LossConfig.traversability_ratio = 10.0
 LossConfig.generator_type = ModelConfig.generator_type
@@ -224,7 +224,7 @@ LossConfig.root = "/home/jing/Documents/gn/database/datasets/regular_data"
 LossConfig.map_resolution = 0.1
 LossConfig.map_range = 300
 LossConfig.image_separate = 20
-LossConfig.output_dir = "/tracto/TractoDiff/images"
+LossConfig.output_dir = "/med/TractoDiff/images"
 
 
 #########################################################################
@@ -249,7 +249,7 @@ TrainingConfig = edict()
 TrainingConfig.name = ""
 TrainingConfig.wandb_api = ""
 TrainingConfig.only_model = False
-TrainingConfig.output_dir = "/tracto/TractoDiff/output_dir_1"
+TrainingConfig.output_dir = "/med/TractoDiff/Tracto"
 TrainingConfig.snapshot = ""
 TrainingConfig.max_epoch = 150
 TrainingConfig.evaluation_freq = 5
@@ -268,7 +268,7 @@ TrainingConfig.gpus.channels_last = True
 TrainingConfig.gpus.local_rank = 1
 TrainingConfig.gpus.sync_bn = True
 TrainingConfig.gpus.no_ddp_bb = False
-TrainingConfig.gpus.device = "cuda:0"
+TrainingConfig.gpus.device = "cuda:1"
 
 TrainingConfig.data = DatasetConfig
 TrainingConfig.model = ModelConfig

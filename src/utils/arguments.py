@@ -11,15 +11,15 @@ def get_args():
     parser.add_argument('--wandb_api', type=str, default="db0123ab9f0948cf1cf4cbb182e78069983fc0ba", help="Your wandb api")
     parser.add_argument('--only_load_model', action='store_true', default=False,
                         help='only load model to continue training')
-    parser.add_argument('--snapshot', type=str, default="", help='snapshot')
-    parser.add_argument('--evaluation_freq', type=int, default=5, help="evaluation frequency")
-    parser.add_argument('--train_time_steps', type=int, default=16, help="time steps for training")
-    parser.add_argument('--training_type', type=int, default=1, help="0: 100 epochs; 1: 10 epochs")
-    parser.add_argument('--debug_output', type=str, default="/tracto/TractoDiff/images", help='snapshot')
+    parser.add_argument('--snapshot', type=str, default="/med/TractoDiff/Tracto/TractoDiffsnapshot.pth.tar", help='snapshot')
+    parser.add_argument('--evaluation_freq', type=int, default=10, help="evaluation frequency")
+    parser.add_argument('--train_time_steps', type=int, default=32, help="time steps for training")
+    parser.add_argument('--training_type', type=int, default=1, help="0: 100 epochs; 1: 20 epochs")
+    parser.add_argument('--debug_output', type=str, default="/med/TractoDiff/images", help='snapshot')
 
     # data args:
     parser.add_argument('--data_root', type=str, help='root of the dataset', default="data_sample")
-    parser.add_argument('--batch_size', type=int, default=64, help="the negative number in the same frame")
+    parser.add_argument('--batch_size', type=int, default=512, help="the negative number in the same frame")
     parser.add_argument('--workers', type=int, default=8, help="the worker number in the dataloader")
 
     # model args:
