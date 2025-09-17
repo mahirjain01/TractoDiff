@@ -11,15 +11,12 @@ from torch.utils.data import Dataset, DataLoader, DistributedSampler
 
 from src.data_loader.dataset import TractographyDataset
 
-
-    
 def reset_seed_worker_init_fn(worker_id):
     r"""Reset seed for data loader worker."""
     seed = torch.initial_seed() % (2 ** 32)
     # print(worker_id, seed)
     np.random.seed(seed)
     random.seed(seed)
-
 
 def registration_collate_fn_stack_mode(data_dicts):
     """Collate function for registration in stack mode.
@@ -54,7 +51,7 @@ def registration_collate_fn_stack_mode(data_dicts):
 
     return collated_dict
 
-def get_dataloader(cfg, train=True):
+def get_dataloader(cfg, train=True, logger = None):
     """
     Create a PyTorch DataLoader for tractography data
     
@@ -70,23 +67,28 @@ def get_dataloader(cfg, train=True):
     Returns:
         DataLoader: PyTorch DataLoader
     """
-    dataset = TractographyDataset(cfg=cfg, train=train)
+    dataset = TractographyDataset(cfg=cfg, train=train,  logger = logger)
     sampler = DistributedSampler(dataset) if cfg.distributed else None
+    
+    shuffle = False
+    if(train):
+        shuffle = True
     
     dataloader = DataLoader(
         dataset=dataset,
         batch_size=cfg.batch_size,
         num_workers=cfg.num_workers,
-        shuffle=cfg.shuffle,
+        shuffle=shuffle,
         sampler=sampler,
         collate_fn=partial(registration_collate_fn_stack_mode),
         worker_init_fn=reset_seed_worker_init_fn,
         pin_memory=False,
         drop_last=False,
     )
+    
     return dataloader
 
-def train_data_loader(cfg):
+def train_data_loader(cfg, logger = None):
     """
     This function is to create a training dataloader with pytorch interface
     Args:
@@ -95,10 +97,10 @@ def train_data_loader(cfg):
         a dataloader in pytorch format
     """
     cfgs = copy.deepcopy(cfg)
-    return get_dataloader(cfg=cfgs, train=True)
+    return get_dataloader(cfg=cfgs, train=True, logger=logger)
 
 
-def evaluation_data_loader(cfg):
+def evaluation_data_loader(cfg, logger = None):
     """
     This function is to create a evaluation dataloader with pytorch interface
     Args:
@@ -107,16 +109,13 @@ def evaluation_data_loader(cfg):
         a dataloader in pytorch format
     """
     cfgs = copy.deepcopy(cfg)
-    return get_dataloader(cfg=cfgs, train=False)
-
-
+    return get_dataloader(cfg=cfgs, train=False, logger=logger)
 
 
 # if __name__ == "__main__":
 #     dataset = TractographyDataset(bundle='AF_L', subjects=['sub-1030'])
 #     print(f"Dataset size: {len(dataset)}")
     
-#     # Test extracting a single sample
 #     sample = dataset[0]
 #     print(f"Sample points : {sample['points']}")
 #     print(f"Sample condition shape: {sample['condition'].shape}")

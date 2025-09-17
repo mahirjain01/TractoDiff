@@ -9,11 +9,6 @@ from easydict import EasyDict as edict
 # Configuration of Dataset and Data Loader
 #########################################################################
 class DataDict:
-    pose = "pose"
-    time = "time"
-    camera = "camera"
-    scan = "scan"
-    lidar2d = "lidar2d"
     local_map = "local_map"
     all_paths = "all_paths"
     targets = "targets"
@@ -61,50 +56,31 @@ class DataDict:
     A = "A"
     b = "b"
 
-class CameraType:
-    realsense_d435i = 0
-    realsense_l515 = 1
-
-
 class DatasetType:
     test = "test"
     train = "train"
-
-
 
 class GeneratorType:
     diffusion = 0
     cvae = 1
 
 
-Lidar_cfg = edict()
-Lidar_cfg.threshold = 100
-Lidar_cfg.channels = 16
-Lidar_cfg.horizons = 1824
-Lidar_cfg.angle_range = 200
-
 DatasetConfig = edict()  # Configuration of data loaders
 DatasetConfig.name = ""
 DatasetConfig.root = "/med/TractoDiff/data_sample"
 DatasetConfig.bundle = "AF_L"
 DatasetConfig.root_path = "/med/TractoDiff/data"
-DatasetConfig.output_path = "/med/TractoDiff/data/WMmasks"
-DatasetConfig.subjects = ["sub-1061"]
+DatasetConfig.condition_path = "/med/TractoDiff/data/WMmasks"
+DatasetConfig.subjects = ["sub-1061", "sub-1159"]
 DatasetConfig.seq_length = 16
-DatasetConfig.batch_size = 64
+DatasetConfig.batch_size = 128
 DatasetConfig.num_workers = 8
-DatasetConfig.shuffle = False
 DatasetConfig.distributed = False
-DatasetConfig.training_data_percentage = 0.95
-
-DatasetConfig.lidar_cfg = Lidar_cfg
-DatasetConfig.vel_num = 10
-DatasetConfig.imu_num = 0
-
 
 #########################################################################
 # Configuration of Models
 #########################################################################
+
 class RNNType:
     gru = 0
     lstm = 1
@@ -120,44 +96,20 @@ class CRNNType:
     gru = "gru"
 
 
-Perception = edict()
-Perception.fix_perception = False
-Perception.vel_dim = 20
-Perception.vel_out = 256
-Perception.lidar_out = 512
-Perception.lidar_norm_layer = False
-Perception.lidar_num = 3
-
-CVAE = edict()
-CVAE.activation_func = None
-CVAE.rnn_type = RNNType.gru
-CVAE.perception_in = Perception.lidar_out + Perception.vel_out + 2
-CVAE.vae_zd = 512
-CVAE.vae_output_threshold = 1
-CVAE.paths_num = 5
-CVAE.waypoints_num = 16
-CVAE.waypoint_dim = 2
-CVAE.estimate_traversability = True
-CVAE.fix_first = False
-CVAE.cvae_file = None
-
 CRNN = edict()
 CRNN.type = CRNNType.gru
 CRNN.waypoint_num = 16
 
 Diffusion = edict() 
-# Diffusion.beta_start = 0.0001
-# Diffusion.beta_end = 0.02
-Diffusion.beta_start = 0.00005
-Diffusion.beta_end = 0.008
+Diffusion.beta_start = 0.0001
+Diffusion.beta_end = 0.02
 Diffusion.beta_schedule = "squaredcos_cap_v2"
-Diffusion.clip_sample = False  # default clip range = 1
-Diffusion.clip_sample_range = 0.7  # default clip range = 1
+Diffusion.clip_sample = True  # default clip range = 1
+Diffusion.clip_sample_range = 0.5  # default clip range = 1
 Diffusion.num_train_timesteps = 250
 Diffusion.variance_type = "fixed_small"
-Diffusion.perception_in = Perception.lidar_out + Perception.vel_out + 2
 Diffusion.diffusion_zd = 512
-Diffusion.waypoint_dim = 2
+Diffusion.waypoint_dim = 3
 Diffusion.waypoints_num = 16
 Diffusion.rnn_type = RNNType.gru
 Diffusion.rnn_output_threshold = 1
@@ -252,7 +204,7 @@ TrainingConfig.only_model = False
 TrainingConfig.output_dir = "/med/TractoDiff/Tracto"
 TrainingConfig.snapshot = ""
 TrainingConfig.max_epoch = 150
-TrainingConfig.evaluation_freq = 5
+TrainingConfig.evaluation_freq = 2
 TrainingConfig.train_time_steps = 5
 TrainingConfig.scheduler = ScheduleMethods.cosine
 TrainingConfig.lr = 1e-4

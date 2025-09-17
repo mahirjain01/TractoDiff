@@ -1,6 +1,4 @@
 import argparse
-import os
-
 import torch
 from src.utils.configs import TrainingConfig, GeneratorType, DiffusionModelType, CRNNType
 

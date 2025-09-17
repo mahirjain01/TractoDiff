@@ -17,5 +17,4 @@ python3 main.py
 
 conda activate /med/TractoDiff/environment && CUDA_LAUNCH_BLOCKING=1 python src/generate_streamline.py --subject sub-1119 --bundle AF_L --dataset_file /med/TractoDiff/data/testset/sub-1119/sub-1119.hdf5 --wm_loc /med/TractoDiff/data/testset/sub-1119/sub-1119-generated_approximated_mask.nii.gz --model_path /med/TractoDiff/output_dir/models/TractoDiff_6.pth --seed_trk /med/TractoDiff/data/testset/sub-1119/tractography/sub-1119__AF_L.trk --output_trk /med/TractoDiff/visualizations/generated.trk
 
-
 conda activate ./environment

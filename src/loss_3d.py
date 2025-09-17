@@ -1,19 +1,9 @@
-import copy
-import math
 import os
-import pickle
-import shutil
-
-import nibabel as nib
 import torch
-import torch.nn as nn
 import numpy as np
-from torch.utils.data import DataLoader
-from os.path import join, exists
+import nibabel as nib
+import torch.nn as nn
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-from matplotlib.colors import to_rgba
-import cv2
 
 from src.utils.configs import GeneratorType, DataDict, Hausdorff, LossNames
 from src.models.diff_hausdorf import HausdorffLoss
@@ -33,7 +23,6 @@ class Loss3D(nn.Module):
 
         self.target_dis = nn.MSELoss(reduction="mean")
         self.distance = HausdorffLoss(mode=cfg.distance_type)
-
         self.chamfer_loss = ChamferLoss()
         self.pointwise_mse_loss = PointwiseMSELoss()
         self.mdf_loss = MDFLoss()
@@ -48,8 +37,7 @@ class Loss3D(nn.Module):
         self.map_resolution = 1
         self.map_range = cfg.map_range 
         self.output_dir = cfg.output_dir
-        if self.output_dir and not exists(self.output_dir):
-            os.makedirs(self.output_dir)
+        os.makedirs(self.output_dir, exist_ok=True)
 
     # ----------------------------------------------------------------
     #                Core 3D Collisions / Traversability
@@ -146,10 +134,7 @@ class Loss3D(nn.Module):
 
         return coords_vox
 
-    # ----------------------------------------------------------------
-    #               Forward Methods (Diffusion / CVAE)
-    # ----------------------------------------------------------------
-    def forward_diffusion(self, input_dict):
+    def forward(self, input_dict):
 
         ygt = input_dict[DataDict.points]     # shape [B, N, 3]
         y_hat = input_dict[DataDict.prediction]
@@ -209,7 +194,7 @@ class Loss3D(nn.Module):
             wm_mask_torch = torch.from_numpy(wm_data).bool()
             wm_mask_torch = wm_mask_torch.to(y_hat_poses.device)
 
-            collision_loss, traversability_vals = self._local_collision_3d(traversability_hat_poses, wm_mask_torch)
+            collision_loss, _ = self._local_collision_3d(traversability_hat_poses, wm_mask_torch)
             collision_loss_mean = collision_loss.mean().float()
 
             all_loss += self.traversability_ratio * collision_loss_mean
@@ -217,72 +202,51 @@ class Loss3D(nn.Module):
 
         output.update({LossNames.loss: all_loss})
         return output
-
-    def forward(self, input_dict):
-        if self.generator_type == GeneratorType.cvae:
-            return self.forward_cvae(input_dict=input_dict)
-        elif self.generator_type == GeneratorType.diffusion:
-            return self.forward_diffusion(input_dict=input_dict)
-        else:
-            raise ValueError("Unknown generator_type {}".format(self.generator_type))
-
-    def convert_path_pixel(self, trajectory):
-        return np.clip(np.around(trajectory / self.map_resolution)[:, :2] + self.map_range, 0, np.inf)
-
-    def show_path_local_map(self, trajectory, gt_path, local_map, idx=0, indices=0):
-        return write_png(local_map=local_map, center=np.array([local_map.shape[0] / 2, local_map.shape[1] / 2]),
-                         file=join(self.output_dir, "local_map_trajectory_{}.png".format(indices + idx)),
-                         paths=[self.convert_path_pixel(trajectory=trajectory)],
-                         others=self.convert_path_pixel(trajectory=gt_path))
-
+    
     @torch.no_grad()
     def evaluate(self, input_dict, indices=0):
         ygt = input_dict[DataDict.points]
         y_hat = input_dict[DataDict.prediction]
-        y_hat_poses = y_hat
 
-        if self.output_dir is not None:
-            all_trajectories = input_dict[DataDict.all_trajectories]
+        # Visualize 3D streamlines
+        if DataDict.bundle in input_dict:
+            subject_id = input_dict[DataDict.subject_id][0]
+            bundle = input_dict[DataDict.bundle][0]
 
-            # Visualize 3D streamlines
-            if DataDict.bundle in input_dict:
-                subject_id = input_dict[DataDict.subject_id][0]
-                bundle = input_dict[DataDict.bundle][0]
+            for idx in range(len(y_hat)):
+                vis_file = os.path.join(self.output_dir, f"streamline_vis_{subject_id}_{bundle}_{indices}_{idx}.png")
+                visualize_3d_streamlines(
+                    predictions=y_hat[idx].detach().cpu().numpy(),
+                    ground_truth=ygt[idx].detach().cpu().numpy(),
+                    subject_id=subject_id,
+                    bundle=bundle,
+                    split="testset",
+                    output_file=vis_file
+                )
 
-                for idx in range(len(y_hat_poses)):
-                    vis_file = join(self.output_dir, f"streamline_vis_{subject_id}_{bundle}_{indices}_{idx}.png")
-                    visualize_3d_streamlines(
-                        predictions=y_hat_poses[idx].detach().cpu().numpy(),
-                        ground_truth=ygt[idx].detach().cpu().numpy(),
-                        subject_id=subject_id,
-                        bundle=bundle,
-                        split="testset",
-                        output_file=vis_file
-                    )
+        path_dis = self.distance(ygt, y_hat).mean()
+        final_path_dis = path_dis
 
-            path_dis = self.distance(ygt, y_hat_poses).mean()
-            final_path_dis = path_dis
+        last_pose_dis = self.target_dis(ygt[:, -1, :], y_hat[:, -1, :])
+        first_pose_dis = self.target_dis(ygt[:, 0, :], y_hat[:, 0, :])
+        output = {
+            LossNames.evaluate_last_dis: last_pose_dis,
+            LossNames.evaluate_path_dis: final_path_dis,
+        }
 
-            last_pose_dis = self.target_dis(ygt[:, -1, :], y_hat_poses[:, -1, :])
-            first_pose_dis = self.target_dis(ygt[:, 0, :], y_hat_poses[:, 0, :])
-            output = {
-                LossNames.evaluate_last_dis: last_pose_dis,
-                LossNames.evaluate_path_dis: final_path_dis,
-            }
+        if self.use_traversability:
+            subject_id = input_dict[DataDict.subject_id][0]
+            wm_mask_path = f"/med/TractoDiff/data/testset/{subject_id}/{subject_id}-generated_approximated_mask.nii.gz"
 
-            if self.use_traversability:
-                subject_id = input_dict[DataDict.subject_id][0]
-                wm_mask_path = f"/med/TractoDiff/data/testset/{subject_id}/{subject_id}-generated_approximated_mask.nii.gz"
+            wm_nifti = nib.load(wm_mask_path)
+            wm_data = wm_nifti.get_fdata()
+            wm_mask_torch = torch.from_numpy(wm_data).bool().to(y_hat.device)
 
-                wm_nifti = nib.load(wm_mask_path)
-                wm_data = wm_nifti.get_fdata()
-                wm_mask_torch = torch.from_numpy(wm_data).bool().to(y_hat_poses.device)
-
-                traversability_loss, traversability_values = self._local_collision_3d(y_hat_poses,wm_mask_torch)
-                traversability_loss_mean = traversability_loss.mean()
-                output.update({LossNames.evaluate_traversability: traversability_loss_mean})
-            
-            return output
+            traversability_loss, traversability_values = self._local_collision_3d(y_hat,wm_mask_torch)
+            traversability_loss_mean = traversability_loss.mean()
+            output.update({LossNames.evaluate_traversability: traversability_loss_mean})
+        
+        return output
 
     def consistency_loss(self, output_dict, teacher_model=True, num_scales=40):
         """
@@ -426,148 +390,3 @@ def visualize_3d_streamlines(predictions, ground_truth, subject_id, bundle, spli
         return output_file
     else:
         return fig
-
-
-def write_png(local_map=None, rgb_local_map=None, center=None, targets=None, paths=None, paths_color=None, path=None,
-              crop_edge=None, others=None, file=None):
-    """
-    Create a 2D visualization of paths on a local map
-    
-    This function is maintained for backward compatibility with existing code
-    For 3D visualization, use visualize_3d_streamlines instead
-    """
-    dis = 2
-    x_range = [local_map.shape[0], 0]
-    y_range = [local_map.shape[1], 0]
-    if rgb_local_map is not None:
-        local_map_fig = rgb_local_map
-    else:
-        local_map_fig = np.repeat(local_map[:, :, np.newaxis], 3, axis=2) * 255
-    if center is not None:
-        assert center.shape[0] == 2 and len(center.shape) == 1, "path should be 2"
-        all_points = []
-        for x in range(-dis, dis, 1):
-            for y in range(-dis, dis, 1):
-                all_points.append(center + np.array([x, y]))
-        all_points = np.stack(all_points).astype(int)
-        local_map_fig[all_points[:, 0], all_points[:, 1], 2] = 255
-        local_map_fig[all_points[:, 0], all_points[:, 1], 1] = 0
-        local_map_fig[all_points[:, 0], all_points[:, 1], 0] = 0
-
-        if x_range[0] > min(all_points[:, 0]):
-            x_range[0] = min(all_points[:, 0])
-        if x_range[1] < max(all_points[:, 0]):
-            x_range[1] = max(all_points[:, 0])
-        if y_range[0] > min(all_points[:, 1]):
-            y_range[0] = min(all_points[:, 1])
-        if y_range[1] < max(all_points[:, 1]):
-            y_range[1] = max(all_points[:, 1])
-    if targets is not None and len(targets) > 0:
-        xs, ys = targets[:, 0], targets[:, 1]
-        xs = np.clip(xs, dis, local_map_fig.shape[0] - dis)
-        ys = np.clip(ys, dis, local_map_fig.shape[1] - dis)
-        clipped_targets = np.stack((xs, ys), axis=-1)
-
-        all_points = []
-        for x in range(-dis, dis, 1):
-            for y in range(-dis, dis, 1):
-                all_points.append(clipped_targets + np.array([x, y]))
-        if len(clipped_targets.shape) == 2:
-            all_points = np.concatenate(all_points, axis=0).astype(int)
-        else:
-            all_points = np.stack(all_points, axis=0).astype(int)
-
-        local_map_fig[all_points[:, 0], all_points[:, 1], 2] = 0
-        local_map_fig[all_points[:, 0], all_points[:, 1], 1] = 255
-        local_map_fig[all_points[:, 0], all_points[:, 1], 0] = 0
-
-        if x_range[0] > min(all_points[:, 0]):
-            x_range[0] = min(all_points[:, 0])
-        if x_range[1] < max(all_points[:, 0]):
-            x_range[1] = max(all_points[:, 0])
-        if y_range[0] > min(all_points[:, 1]):
-            y_range[0] = min(all_points[:, 1])
-        if y_range[1] < max(all_points[:, 1]):
-            y_range[1] = max(all_points[:, 1])
-    if others is not None:
-        assert others.shape[1] == 2 and len(others.shape) == 2, "path should be Nx2"
-        all_points = []
-        for x in range(-dis, dis, 1):
-            for y in range(-dis, dis, 1):
-                all_points.append(others + np.array([x, y]))
-        all_points = np.concatenate(all_points, axis=0).astype(int)
-
-        xs, ys = all_points[:, 0], all_points[:, 1]
-        xs = np.clip(xs, 0, local_map_fig.shape[0] - 1)
-        ys = np.clip(ys, 0, local_map_fig.shape[1] - 1)
-        local_map_fig[xs, ys, 0] = 255
-        local_map_fig[xs, ys, 1] = 255
-        local_map_fig[xs, ys, 2] = 0
-
-        if x_range[0] > min(xs):
-            x_range[0] = min(xs)
-        if x_range[1] < max(xs):
-            x_range[1] = max(xs)
-        if y_range[0] > min(ys):
-            y_range[0] = min(ys)
-        if y_range[1] < max(ys):
-            y_range[1] = max(ys)
-    if path is not None:
-        assert path.shape[1] == 2 and len(path.shape) == 2 and path.shape[0] >= 2, "path should be Nx2"
-        all_pts = path
-        all_pts = np.concatenate((all_pts + np.array([0, -1], dtype=int), all_pts + np.array([1, 0], dtype=int),
-                                  all_pts + np.array([-1, 0], dtype=int), all_pts + np.array([0, 1], dtype=int),
-                                  all_pts), axis=0)
-        xs, ys = all_pts[:, 0], all_pts[:, 1]
-        xs = np.clip(xs, 0, local_map_fig.shape[0] - 1)
-        ys = np.clip(ys, 0, local_map_fig.shape[1] - 1)
-        local_map_fig[xs, ys, 0] = 0
-        local_map_fig[xs, ys, 1] = 255
-        local_map_fig[xs, ys, 2] = 255
-
-        if x_range[0] > min(xs):
-            x_range[0] = min(xs)
-        if x_range[1] < max(xs):
-            x_range[1] = max(xs)
-        if y_range[0] > min(ys):
-            y_range[0] = min(ys)
-        if y_range[1] < max(ys):
-            y_range[1] = max(ys)
-    if paths is not None:
-        for p_idx in range(len(paths)):
-            path = paths[p_idx]
-            if len(path) == 1 or np.any(path[0] == np.inf):
-                continue
-            path = np.asarray(path, dtype=int)
-            assert path.shape[1] == 2 and len(path.shape) == 2 and path.shape[0] >= 2, "path should be Nx2"
-            all_pts = path
-            all_pts = np.concatenate((all_pts + np.array([0, -1], dtype=int), all_pts + np.array([1, 0], dtype=int),
-                                      all_pts + np.array([-1, 0], dtype=int), all_pts + np.array([0, 1], dtype=int),
-                                      all_pts), axis=0)
-            xs, ys = all_pts[:, 0], all_pts[:, 1]
-            xs = np.clip(xs, 0, local_map_fig.shape[0] - 1)
-            ys = np.clip(ys, 0, local_map_fig.shape[1] - 1)
-            if paths_color is not None:
-                local_map_fig[xs, ys, 0] = 0
-                local_map_fig[xs, ys, 1] = 0
-                local_map_fig[xs, ys, 2] = paths_color[p_idx]
-            else:
-                local_map_fig[xs, ys, 0] = 0
-                local_map_fig[xs, ys, 1] = 255
-                local_map_fig[xs, ys, 2] = 255
-
-            if x_range[0] > min(all_pts[:, 0]):
-                x_range[0] = min(all_pts[:, 0])
-            if x_range[1] < max(all_pts[:, 0]):
-                x_range[1] = max(all_pts[:, 0])
-            if y_range[0] > min(all_pts[:, 1]):
-                y_range[0] = min(all_pts[:, 1])
-            if y_range[1] < max(all_pts[:, 1]):
-                y_range[1] = max(all_pts[:, 1])
-    if crop_edge:
-        local_map_fig = local_map_fig[
-                        max(0, x_range[0] - crop_edge):min(x_range[1] + crop_edge, local_map_fig.shape[0]),
-                        max(0, y_range[0] - crop_edge):min(y_range[1] + crop_edge, local_map_fig.shape[1])]
-    if file is not None:
-        cv2.imwrite(file, local_map_fig)
-    return local_map_fig

@@ -1,11 +1,6 @@
-import torch
 from torch import nn
-
-from src.models.perception import Perception, LidarImageModel
+from src.utils.configs import DataDict
 from src.models.diffusion import Diffusion
-
-from src.utils.configs import DataDict, GeneratorType
-
 
 class HNav(nn.Module):
     def __init__(self, config, device):
@@ -18,20 +13,11 @@ class HNav(nn.Module):
         self.generator = self.generator.to(device)
 
     def forward(self, input_dict, sample=False):
-        # Ensure we're on the correct device
+        # Ensure the correct device
         curr_device = next(self.parameters()).device
         if str(curr_device) != str(self.device):
             self.to(self.device)
 
-        # output = {DataDict.path: input_dict[DataDict.path],
-        #               DataDict.heuristic: input_dict[DataDict.heuristic],
-        #               DataDict.local_map: input_dict[DataDict.local_map]}
-
-        # # /////// shape for condition vector /////////////
-        # observation = self.perception(lidar=input_dict[DataDict.lidar], vel=input_dict[DataDict.vel],
-        #                                 target=input_dict[DataDict.target])
-        # print("The observation shape is: ", observation.shape)
-        
         if sample:
             return self.sample(input_dict=input_dict)
         else:
@@ -47,8 +33,6 @@ class HNav(nn.Module):
             return output
 
     def sample(self, input_dict):
-        # Ensure we're on the correct device
-
         curr_device = next(self.parameters()).device
         if str(curr_device) != str(self.device):
             self.to(self.device)
@@ -65,7 +49,6 @@ class HNav(nn.Module):
         generator_output = self.generator.sample(observation=observation)
         output.update(generator_output)
         return output
-
 
 def get_model(config, device):
     model = HNav(config=config, device=device)

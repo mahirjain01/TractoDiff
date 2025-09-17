@@ -1,30 +1,29 @@
-import copy
-import os
-import time
-from os.path import join, exists
-from typing import Tuple
-from datetime import timedelta
 
+import os
 import torch
-import wandb
-from torch.nn.parallel import DistributedDataParallel as DDP
-import torch.distributed as dist
-from tqdm import tqdm
-import os.path as osp
+import time
 import numpy as np
 
-from src.utils.configs import TrainingConfig, ScheduleMethods, LossNames, LogNames, LogTypes, DataDict
-from src.loss import Loss
+from tqdm import tqdm
+import os.path as osp
 from src.loss_3d import Loss3D
+from datetime import timedelta
+import torch.distributed as dist
+from torch.amp import GradScaler
+from torch.cuda.amp import autocast
 from src.models.model import get_model
+from timm.optim import create_optimizer_v2
+from torch.utils.tensorboard import SummaryWriter
+from torch.nn.parallel import DistributedDataParallel as DDP
 from src.utils.functions import to_device, get_device, release_cuda
-
-from src.utils.logger import TrainingLogger
+from src.utils.configs import ScheduleMethods, LossNames, LogTypes, DataDict
 from src.data_loader.dataset_tracto import train_data_loader, evaluation_data_loader
 
+from src.utils.logger import TrainingLogger
+# from src.data_loader.dataset_tracto import TractographyDataset, get_dataloader
 
 class TractographyTrainer:
-    def __init__(self, cfgs: TrainingConfig):
+    def __init__(self, cfgs):
         """
         Trainer class for tractography model
         Args:
@@ -35,16 +34,29 @@ class TractographyTrainer:
         self.evaluation_freq = cfgs.evaluation_freq
         self.train_time_steps = cfgs.train_time_steps
 
-        self.output_dir = "/med/TractoDiff/logs"
+        self.output_dir = "/tracto/TractoDiff/logs"
 
         self.iteration = 0
         self.epoch = 0
         self.training = False
 
+        self.gradient_accumulation_steps = getattr(cfgs, 'gradient_accumulation_steps', 4)
+        self.use_amp = getattr(cfgs, 'use_amp', True)  
+        self.amp_dtype = getattr(cfgs, 'amp_dtype', torch.float16)  
+        
+        # Initialize gradient scaler for AMP
+        self.scaler = GradScaler() if self.use_amp else None
+
         self.logger = TrainingLogger(
             output_dir=self.output_dir,
             experiment_name=self.name
         )
+
+        self.logging = self.logger.event_logger
+
+        tensorboard_log_dir = os.path.join(self.output_dir, "tensorboard")
+        self.writer = SummaryWriter(log_dir=tensorboard_log_dir)
+        self.logging.info(f"TensorBoard logs will be saved to: {tensorboard_log_dir}")
 
         # Set up device
         if cfgs.gpus.device == "cuda":
@@ -85,17 +97,24 @@ class TractographyTrainer:
             "gpus": cfgs.gpus,
             "epochs": self.max_epoch
         }
-        wandb.login(key=cfgs.wandb_api)
-        if self.distributed:
-            self.wandb_run = wandb.init(project=self.name, config=configs, group="DDP")
-        else:
-            self.wandb_run = wandb.init(project=self.name, config=configs)
-
+        
+        self.logging.info(f"The configs being used are : {configs}")
+      
         # Setup optimizer and scheduler
-        self.optimizer = torch.optim.Adam(
-            self.model.parameters(), 
-            lr=cfgs.lr, 
-            weight_decay=cfgs.weight_decay
+        
+        # self.optimizer = torch.optim.AdamW(
+        #     self.model.parameters(),    
+        #     lr=cfgs.lr, 
+        #     weight_decay=cfgs.weight_decay
+        # )
+
+        self.optimizer = create_optimizer_v2(
+            self.model.parameters(),
+            opt='adamw',
+            lr=cfgs.lr,
+            weight_decay=cfgs.weight_decay,
+            betas = (0.9, 0.999),
+            eps = 1e-8
         )
         
         self.scheduler_type = cfgs.scheduler
@@ -116,9 +135,9 @@ class TractographyTrainer:
             raise ValueError("Unsupported scheduler type")
 
         if self.snapshot:
-            print(f"[SNAPSHOT] Attempting to load snapshot from: {self.snapshot}")
+            self.logging.warning(f"[SNAPSHOT] Attempting to load snapshot from: {self.snapshot}")
             state_dict = self.load_snapshot(self.snapshot)
-            print(f"[SNAPSHOT] Loaded snapshot keys: {list(state_dict.keys())}")
+            self.logging.warning(f"[SNAPSHOT] Loaded snapshot keys: {list(state_dict.keys())}")
             if not cfgs.only_model:
                 self.load_learning_parameters(state_dict)
 
@@ -127,8 +146,8 @@ class TractographyTrainer:
         self.loss_func = self.loss_func.to(self.device)
 
         # datasets:
-        self.training_data_loader = train_data_loader(cfg=cfgs.data)
-        self.evaluation_data_loader = evaluation_data_loader(cfg=cfgs.data)
+        self.training_data_loader = train_data_loader(cfg=cfgs.data, logger = self.logging)
+        self.evaluation_data_loader = evaluation_data_loader(cfg=cfgs.data, logger = self.logging)
 
         # Additional output_dir
         self.use_traversability = cfgs.loss.use_traversability
@@ -136,6 +155,9 @@ class TractographyTrainer:
         self.time_step_loss_buffer = []
         self.time_step_number = cfgs.model.diffusion.traversable_steps
         self.traversability_threshold = cfgs.traversability_threshold
+
+        self.accumulated_loss = 0.0
+        self.accumulation_step = 0
 
     # Keep all the existing methods from train.py, but modify step() to handle the new dataset format
     def step(self, data_dict, train=True) -> dict:
@@ -151,68 +173,69 @@ class TractographyTrainer:
         """
         self._ensure_model_on_device()
         data_dict = to_device(data_dict, device=self.device)
+        self.loss_func = self.loss_func.to(self.device)
         
         if train:
-            output_dict = self.model(data_dict, sample=False)
-            # print("Output dict keys : ", output_dict["points"].shape)
-            # print("Shape of prediction : ", output_dict["prediction"].shape)
-            torch.cuda.empty_cache()
-            self.loss_func = self.loss_func.to(self.device)
+            with autocast(device = self.device, enabled=True):
+                output_dict = self.model(data_dict, sample=False)
+                # self.logging.info("Output dict keys : ", output_dict["points"].shape)
+                # self.logging.info("Shape of prediction : ", output_dict["prediction"].shape)
+                torch.cuda.empty_cache()
 
-            y_hat = output_dict["prediction"][0]
-            y_hat_poses = y_hat
-           
-            print("The pred is: ", y_hat_poses)
-            print("The gt is: ", output_dict["points"][0])
-            
-            loss_dict = self.loss_func(output_dict)
-            output_dict.update(loss_dict)
+                loss_dict = self.loss_func(output_dict)
+                output_dict.update(loss_dict)
+                loss = output_dict[LossNames.loss] / self.gradient_accumulation_steps
+
+            # self.logging.info("The pred is: ", output_dict["prediction"][0])
+            # self.logging.info("The gt is: ", output_dict["points"][0])
+
+            output_dict[LossNames.loss] = loss 
+            # Return scaled loss for backward pass
+            output_dict['scaled_loss'] = loss
+
         else:
             # For evaluation, pass ground truth for logging purposes
             output_dict = self.model(data_dict, sample=True)
             torch.cuda.empty_cache()
-            self.loss_func = self.loss_func.to(self.device)
             eval_dict = self.loss_func.evaluate(output_dict)
             
-            # New comparison logging code
             gt = data_dict['points']
             pred = output_dict['prediction']
             
-            print("\n=== Epoch {} Trajectory Comparison ===".format(self.epoch))
-            print(f"{'Point':>8} {'Ground Truth':>40} {'Prediction':>40} {'Difference':>20}")
-            print("-" * 110)
+            self.logging.info("\n=== Epoch {} Trajectory Comparison ===".format(self.epoch))
+            self.logging.info(f"{'Point':>8} {'Ground Truth':>40} {'Prediction':>40} {'Difference':>20}")
+            self.logging.info("-" * 110)
             
             for i in range(min(3, gt.shape[0])):  # Show first 3 trajectories
-                print(f"\nTrajectory {i+1}:")
+                self.logging.info(f"\nTrajectory {i+1}:")
                 for j in range(gt.shape[1]):  # For each point in sequence
                     gt_point = gt[i, j].cpu().numpy()
                     pred_point = pred[i, j].cpu().numpy()
                     diff = np.abs(gt_point - pred_point)
                     
-                    print(f"Point {j:2d}: "
+                    self.logging.info(f"Point {j:2d}: "
                           f"[{gt_point[0]:8.3f}, {gt_point[1]:8.3f}, {gt_point[2]:8.3f}] -> "
                           f"[{pred_point[0]:8.3f}, {pred_point[1]:8.3f}, {pred_point[2]:8.3f}] "
                           f"Diff: [{diff[0]:6.3f}, {diff[1]:6.3f}, {diff[2]:6.3f}]")
                 
                 # Calculate and show trajectory statistics
                 mean_error = np.mean(np.abs(gt[i].cpu().numpy() - pred[i].cpu().numpy()))
-                print(f"Mean Error for Trajectory {i+1}: {mean_error:.3f}")
+                self.logging.info(f"Mean Error for Trajectory {i+1}: {mean_error:.3f}")
             
-            print("\n=== Overall Statistics ===")
+            self.logging.info("\n=== Overall Statistics ===")
             total_mean_error = np.mean(np.abs(gt.cpu().numpy() - pred.cpu().numpy()))
-            print(f"Total Mean Error: {total_mean_error:.3f}")
-            print("=" * 110 + "\n")
+            self.logging.info(f"Total Mean Error: {total_mean_error:.3f}")
+            self.logging.info("=" * 110 + "\n")
             
             output_dict.update(eval_dict)
 
         # For inference, log diffusion model parameters
         if not self.training and hasattr(self.model, 'generator') and hasattr(self.model.generator, 'sample'):
             if hasattr(self.model.generator, 'time_steps'):
-                print(f"[DEBUG] Diffusion time_steps: {self.model.generator.time_steps}")
+                self.logging.warning(f"[DEBUG] Diffusion time_steps: {self.model.generator.time_steps}")
             if hasattr(self.model.generator, 'sample_times'):
-                print(f"[DEBUG] Diffusion sample_times: {self.model.generator.sample_times}")
-    
-            
+                self.logging.warning(f"[DEBUG] Diffusion sample_times: {self.model.generator.sample_times}")
+
         return output_dict
 
     def _set_model_gpus(self, cfg):
@@ -352,9 +375,9 @@ class TractographyTrainer:
         # print('Snapshot saved to "{}"'.format(snapshot_filename))
 
     def cleanup(self):
+        self.writer.close()
         if self.distributed:
             dist.destroy_process_group()
-        self.wandb_run.finish()
 
     def set_train_mode(self):
         """
@@ -390,61 +413,76 @@ class TractographyTrainer:
         else:
             self.model = self.model.to(self.device)
     
-    def update_log(self, results, timestep=None, log_name=None):
-        if timestep is not None:
-            self.wandb_run.log({LogNames.step_time: timestep})
-        if log_name == LogTypes.train:
-            value = self.scheduler.get_last_lr()
-            self.wandb_run.log({log_name + "/" + LogNames.lr: value[-1]})
+    def update_log(self, results, log_prefix):
+        """Logs metrics to TensorBoard for graph visualization."""
+        global_step = self.iteration
 
-        if log_name is None:
-            for key, value in results.items():
-                self.wandb_run.log({key: value})
-        else:
-            for key, value in results.items():
-                self.wandb_run.log({log_name + "/" + key: value})
+        # Log learning rate separately during training
+        if log_prefix == LogTypes.train:
+            lr_value = self.scheduler.get_last_lr()[-1]
+            self.writer.add_scalar(f"{log_prefix}/learning_rate", lr_value, global_step)
+
+        # Log all other scalar metrics from the results dictionary
+        for key, value in results.items():
+            # Check if the value is a loggable scalar (a single number)
+            if torch.is_tensor(value) and value.numel() == 1:
+                self.writer.add_scalar(f"{log_prefix}/{key}", value.item(), global_step)
+            elif isinstance(value, (int, float)):
+                self.writer.add_scalar(f"{log_prefix}/{key}", value, global_step)
 
     def run_epoch(self):
         """
         run training epochs
         """
         self.optimizer.zero_grad()
-
         last_time = time.time()
 
         total_loss = 0
         num_batches = 0
 
-        # with open(self.output_file, "a") as f:
-        #     print("Training CUDA {} Epoch {} \n".format(self.current_rank, self.epoch), file=f)
         for iteration, data_dict in enumerate(
                 tqdm(self.training_data_loader, desc="Training Epoch {}".format(self.epoch))):
             self.iteration += 1
             data_dict[DataDict.traversable_step] = self.time_step_number
-            for step_iteration in range(self.train_time_steps):
-                output_dict = self.step(data_dict=data_dict)
-                torch.cuda.empty_cache()
+            
+            output_dict = self.step(data_dict=data_dict, train = True)
+            torch.cuda.empty_cache()
+            scaled_loss = output_dict['scaled_loss']
+            self.scaler.scale(scaled_loss).backward()
 
-                output_dict[LossNames.loss].backward()
-                self.optimizer_step()
-                optimize_time = time.time()
+            if (iteration + 1) % self.gradient_accumulation_steps == 0:
+                # Unscale gradients and step the optimizer
+                self.scaler.step(self.optimizer)
+                
+                # Update the scaler
+                self.scaler.update()
+                
+                # Zero the gradients for the next accumulation cycle
+                self.optimizer.zero_grad()
 
-                loss = output_dict[LossNames.loss]
-                loss_value = loss.item() if torch.is_tensor(loss) else float(loss)
+            optimize_time = time.time()
+            step_duration_sec = optimize_time - last_time
+            last_time = time.time()
 
-                self.logger.log_iteration(
-                    iteration=self.iteration,
-                    loss=loss_value,
-                    epoch=self.epoch
-                )
+            output_dict['step_duration_sec'] = step_duration_sec
 
-                output_dict = release_cuda(output_dict)
-                self.update_log(results=output_dict, timestep=optimize_time - last_time, log_name=LogTypes.train)
-                last_time = time.time()
+            loss_value = output_dict[LossNames.loss]
+            loss_value = loss_value.item() if torch.is_tensor(loss_value) else float(loss_value)
 
-                total_loss += loss_value
-                num_batches += 1
-        
+            self.logger.log_iteration(
+                iteration=self.iteration,
+                loss=loss_value,
+                metrics=output_dict,
+                epoch=self.epoch
+            )
+
+            output_dict = release_cuda(output_dict)
+            self.update_log(results=output_dict, log_prefix=LogTypes.train)
+            last_time = time.time()
+
+            total_loss += loss_value
+            num_batches += 1
+    
         epoch_avg_loss = self.logger.log_epoch(self.epoch)
 
         self.scheduler.step()
@@ -459,26 +497,25 @@ class TractographyTrainer:
 
     def inference_epoch(self):
         if (self.evaluation_freq > 0) and (self.epoch % self.evaluation_freq == 0):
-            # Ensure model and loss function are on correct device
             self._ensure_model_on_device()
             device = self.device
             
             # Log model configuration and sampling parameters
-            print("\n===== MODEL EVALUATION CONFIGURATION =====")
-            print(f"Generator type: {self.generator_type}")
+            self.logging.info("\n===== MODEL EVALUATION CONFIGURATION =====")
+            self.logging.info(f"Generator type: {self.generator_type}")
             
             # Get diffusion parameters
             if hasattr(self.model.generator, 'sample_times'):
-                print(f"Sample times: {self.model.generator.sample_times}")
+                self.logging.info(f"Sample times: {self.model.generator.sample_times}")
             if hasattr(self.model.generator, 'time_steps'):
-                print(f"Time steps: {self.model.generator.time_steps}")
+                self.logging.info(f"Time steps: {self.model.generator.time_steps}")
             if hasattr(self.model.generator, 'inference_steps'):
-                print(f"Inference steps: {self.model.generator.inference_steps}")
+                self.logging.info(f"Inference steps: {self.model.generator.inference_steps}")
             
             # Show model's device and mode
-            print(f"Model device: {next(self.model.parameters()).device}")
-            print(f"Model mode: {'eval' if not self.model.training else 'train'}")
-            print("=========================================\n")
+            self.logging.info(f"Model device: {next(self.model.parameters()).device}")
+            self.logging.info(f"Model mode: {'eval' if not self.model.training else 'train'}")
+            self.logging.info("=========================================\n")
             
             # Move loss function to correct device
             self.loss_func = self.loss_func.to(device)
@@ -501,17 +538,17 @@ class TractographyTrainer:
                     'total_loss': output_dict[LossNames.loss].item() if LossNames.loss in output_dict else None
                 })
                 
+                self.update_log(results=output_dict, log_prefix=LogTypes.others)
+
                 output_dict = release_cuda(output_dict)
                 torch.cuda.empty_cache()
-                self.update_log(results=output_dict, timestep=step_time - start_time, log_name=LogTypes.others)
 
-    
             # Print summary statistics
             avg_path_dis = np.mean([l['path_dis'] for l in epoch_losses])
-            print(f"\nEpoch {self.epoch} Average Path Distance: {avg_path_dis:.4f}")
+            self.logging.info(f"\nEpoch {self.epoch} Average Path Distance: {avg_path_dis:.4f}")
             if epoch_losses[0]['total_loss'] is not None:
                 avg_total_loss = np.mean([l['total_loss'] for l in epoch_losses])
-                print(f"Epoch {self.epoch} Average Total Loss: {avg_total_loss:.4f}")
+                self.logging.info(f"Epoch {self.epoch} Average Total Loss: {avg_total_loss:.4f}")
 
     def run(self):
         """
@@ -521,20 +558,25 @@ class TractographyTrainer:
         try:
             for self.epoch in range(self.epoch, self.max_epoch, 1):
 
-                if(self.epoch != 0):
-                    self.set_eval_mode()
-                    self.inference_epoch()
-
                 self.set_train_mode()
                 if self.distributed:
                     self.training_data_loader.sampler.set_epoch(self.epoch)
                     if self.evaluation_freq > 0:
                         self.evaluation_data_loader.sampler.set_epoch(self.epoch)
+                        
                 self.run_epoch()
+                
+                if (self.evaluation_freq > 0) and (self.epoch + 1) % self.evaluation_freq == 0:
+                    self.set_eval_mode()
+                    self.inference_epoch()
     
         finally:
             # Create final loss plot with a distinctive name
             final_plot_path = os.path.join(self.output_dir, f'{self.name}_final_loss_curve.png')
             self.logger.plot_losses(save_path=final_plot_path)
+            
+            final_epoch_plot_path = os.path.join(self.output_dir, f'{self.name}_epoch_metrics_curve.png')
+            self.logger.plot_epoch_metrics(save_path=final_epoch_plot_path)
+            
             self.cleanup()
 
