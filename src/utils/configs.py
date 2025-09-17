@@ -129,9 +129,7 @@ Diffusion.crnn = CRNN
 
 ModelConfig = edict()
 ModelConfig.generator_type = GeneratorType.cvae
-ModelConfig.cvae = CVAE
 ModelConfig.diffusion = Diffusion
-ModelConfig.perception = Perception
 ModelConfig.scale_waypoints = 1.0
 
 
