@@ -32,8 +32,6 @@ class TractographyTrainer:
         self.name = cfgs.name
         self.max_epoch = cfgs.max_epoch
         self.evaluation_freq = cfgs.evaluation_freq
-        self.train_time_steps = cfgs.train_time_steps
-
         self.output_dir = "/tracto/TractoDiff/logs"
 
         self.iteration = 0
@@ -153,7 +151,6 @@ class TractographyTrainer:
         self.use_traversability = cfgs.loss.use_traversability
         self.generator_type = cfgs.model.generator_type
         self.time_step_loss_buffer = []
-        self.time_step_number = cfgs.model.diffusion.traversable_steps
         self.traversability_threshold = cfgs.traversability_threshold
 
         self.accumulated_loss = 0.0
@@ -443,7 +440,6 @@ class TractographyTrainer:
         for iteration, data_dict in enumerate(
                 tqdm(self.training_data_loader, desc="Training Epoch {}".format(self.epoch))):
             self.iteration += 1
-            data_dict[DataDict.traversable_step] = self.time_step_number
             
             output_dict = self.step(data_dict=data_dict, train = True)
             torch.cuda.empty_cache()

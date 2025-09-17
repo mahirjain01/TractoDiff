@@ -91,7 +91,6 @@ class Inference:
         self.use_traversability = cfgs.loss.use_traversability
         self.generator_type = cfgs.model.generator_type
         self.time_step_loss_buffer = []
-        self.time_step_number = cfgs.model.diffusion.traversable_steps
         self.traversability_threshold = cfgs.traversability_threshold
 
     def _set_model_gpus(self, cfg):

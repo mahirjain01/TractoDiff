@@ -27,7 +27,6 @@ class Loss3D(nn.Module):
         self.pointwise_mse_loss = PointwiseMSELoss()
         self.mdf_loss = MDFLoss()
 
-        self.train_poses = cfg.train_poses
         self.distance_type = cfg.distance_type
         self.scale_waypoints = 10.0
         self.last_ratio = cfg.last_ratio
@@ -143,13 +142,7 @@ class Loss3D(nn.Module):
         # print("Shape of groundtruth: ", ygt.shape)
         # print("Shape of prediction: ", y_hat.shape)
         output = {}
-
         y_hat_poses = y_hat
-
-        # if self.train_poses:
-        #     y_hat_poses = y_hat * self.scale_waypoints
-        # else:
-        #     y_hat_poses = torch.cumsum(y_hat, dim=1) * self.scale_waypoints
 
         if self.use_traversability:
             B = y_hat_poses.shape[0]

@@ -64,7 +64,6 @@ class GeneratorType:
     diffusion = 0
     cvae = 1
 
-
 DatasetConfig = edict()  # Configuration of data loaders
 DatasetConfig.name = ""
 DatasetConfig.root = "/med/TractoDiff/data_sample"
@@ -196,21 +195,20 @@ class LogTypes:
 
 
 TrainingConfig = edict()
-TrainingConfig.name = ""
+TrainingConfig.name = "Baseline"
 TrainingConfig.wandb_api = ""
 TrainingConfig.only_model = False
 TrainingConfig.output_dir = "/med/TractoDiff/Tracto"
 TrainingConfig.snapshot = ""
 TrainingConfig.max_epoch = 150
 TrainingConfig.evaluation_freq = 2
-TrainingConfig.train_time_steps = 5
 TrainingConfig.scheduler = ScheduleMethods.cosine
-TrainingConfig.lr = 1e-4
+TrainingConfig.lr = 3e-4
 TrainingConfig.weight_decay = 0
 # for cosine scheduler
 TrainingConfig.lr_t0 = 1
-TrainingConfig.lr_tm = 5
-TrainingConfig.lr_min = 1e-7
+TrainingConfig.lr_tm = 10
+TrainingConfig.lr_min = 1e-8
 TrainingConfig.traversability_threshold = 1e-7
 
 TrainingConfig.gpus = edict()

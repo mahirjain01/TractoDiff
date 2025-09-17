@@ -13,8 +13,6 @@ class Diffusion(nn.Module):
         super(Diffusion, self).__init__()
         self.model_type = cfg.model_type
         # self.diffusion_type = cfg.diffusion_type
-        self.sample_times = cfg.sample_times
-        self.inference_steps = getattr(cfg, 'inference_steps', None)  # Get inference_steps from config or use None
         self.noise_scheduler = DDPMScheduler(beta_start=cfg.beta_start, beta_end=cfg.beta_end,
                                              prediction_type="sample", num_train_timesteps=cfg.num_train_timesteps,
                                              clip_sample_range=cfg.clip_sample_range, clip_sample=cfg.clip_sample,
