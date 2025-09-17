@@ -33,7 +33,6 @@ class TractographyDataset(Dataset):
         self.seq_length = cfg.seq_length
         self.root_path = cfg.root_path
         self.condition_path = cfg.condition_path
-        self.shuffle = cfg.shuffle
         
         self.streamlines = []
         self.condition_vectors = []

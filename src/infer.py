@@ -8,7 +8,6 @@ import subprocess
 
 from warnings import warn
 import torch
-import wandb
 from torch import autocast
 from torch.cuda.amp import GradScaler
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -18,7 +17,6 @@ import os.path as osp
 from datetime import datetime, timedelta
 
 from src.utils.configs import TrainingConfig, ScheduleMethods, LossNames, LogNames, LogTypes, DataDict, GeneratorType
-from src.loss import Loss
 from src.loss_3d import Loss3D
 from src.models.model import get_model
 from src.utils.functions import to_device, get_device, release_cuda
@@ -26,7 +24,7 @@ from src.data_loader.dataset_tracto import train_data_loader, evaluation_data_lo
 
 
 class Inference:
-    def __init__(self, cfgs: TrainingConfig):
+    def __init__(self, cfgs):
 
         self.evaluation_freq = cfgs.evaluation_freq
 

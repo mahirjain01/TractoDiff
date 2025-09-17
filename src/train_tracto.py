@@ -9,8 +9,7 @@ import os.path as osp
 from src.loss_3d import Loss3D
 from datetime import timedelta
 import torch.distributed as dist
-from torch.amp import GradScaler
-from torch.cuda.amp import autocast
+from torch.cuda.amp import autocast, GradScaler
 from src.models.model import get_model
 from timm.optim import create_optimizer_v2
 from torch.utils.tensorboard import SummaryWriter
@@ -32,7 +31,7 @@ class TractographyTrainer:
         self.name = cfgs.name
         self.max_epoch = cfgs.max_epoch
         self.evaluation_freq = cfgs.evaluation_freq
-        self.output_dir = "/tracto/TractoDiff/logs"
+        self.output_dir = "/med/TractoDiff/logs"
 
         self.iteration = 0
         self.epoch = 0
@@ -173,7 +172,7 @@ class TractographyTrainer:
         self.loss_func = self.loss_func.to(self.device)
         
         if train:
-            with autocast(device = self.device, enabled=True):
+            with autocast(enabled=True):
                 output_dict = self.model(data_dict, sample=False)
                 # self.logging.info("Output dict keys : ", output_dict["points"].shape)
                 # self.logging.info("Shape of prediction : ", output_dict["prediction"].shape)
