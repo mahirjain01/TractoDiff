@@ -36,7 +36,7 @@ def generate_condition_vector(point: np.ndarray, env: BaseEnv) -> np.ndarray:
     return env._format_state(point)[0]
 
 class StreamlineGenerator:
-    def __init__(self, cfg: TrainingConfig):
+    def __init__(self, cfg):
         self.cfg = cfg
         self.name = cfg.name
         self.iteration = 0
@@ -161,7 +161,7 @@ class StreamlineGenerator:
             # Add new segment to streamline
             streamline.extend(new_segment)
             
-            # Update current point to last point of new segment
+            # Update current point to last point of ne  w segment
             current_point = new_segment[-1]
             
             # Check termination conditions

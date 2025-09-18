@@ -3,8 +3,6 @@ import copy
 import pickle
 import random
 import numpy as np
-import nibabel as nib
-import cv2
 import torch
 from functools import partial
 from torch.utils.data import Dataset, DataLoader, DistributedSampler

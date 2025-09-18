@@ -9,9 +9,9 @@ import os.path as osp
 from src.loss_3d import Loss3D
 from datetime import timedelta
 import torch.distributed as dist
-from torch.cuda.amp import autocast, GradScaler
+from torch.amp import autocast, GradScaler
 from src.models.model import get_model
-from timm.optim import create_optimizer_v2
+# from timm.optim import create_optimizer_v2
 from torch.utils.tensorboard import SummaryWriter
 from torch.nn.parallel import DistributedDataParallel as DDP
 from src.utils.functions import to_device, get_device, release_cuda
@@ -41,9 +41,6 @@ class TractographyTrainer:
         self.use_amp = getattr(cfgs, 'use_amp', True)  
         self.amp_dtype = getattr(cfgs, 'amp_dtype', torch.float16)  
         
-        # Initialize gradient scaler for AMP
-        self.scaler = GradScaler() if self.use_amp else None
-
         self.logger = TrainingLogger(
             output_dir=self.output_dir,
             experiment_name=self.name
@@ -96,23 +93,26 @@ class TractographyTrainer:
         }
         
         self.logging.info(f"The configs being used are : {configs}")
+        
+         # Initialize gradient scaler for AMP
+        self.scaler = GradScaler(device = self.device) if self.use_amp else None
       
         # Setup optimizer and scheduler
         
-        # self.optimizer = torch.optim.AdamW(
-        #     self.model.parameters(),    
-        #     lr=cfgs.lr, 
-        #     weight_decay=cfgs.weight_decay
-        # )
-
-        self.optimizer = create_optimizer_v2(
-            self.model.parameters(),
-            opt='adamw',
-            lr=cfgs.lr,
-            weight_decay=cfgs.weight_decay,
-            betas = (0.9, 0.999),
-            eps = 1e-8
+        self.optimizer = torch.optim.AdamW(
+            self.model.parameters(),    
+            lr=cfgs.lr, 
+            weight_decay=cfgs.weight_decay
         )
+
+        # self.optimizer = create_optimizer_v2(
+        #     self.model.parameters(),
+        #     opt='adamw',
+        #     lr=cfgs.lr,
+        #     weight_decay=cfgs.weight_decay,
+        #     betas = (0.9, 0.999),
+        #     eps = 1e-8
+        # )
         
         self.scheduler_type = cfgs.scheduler
         if self.scheduler_type == ScheduleMethods.step:
@@ -146,8 +146,9 @@ class TractographyTrainer:
         self.training_data_loader = train_data_loader(cfg=cfgs.data, logger = self.logging)
         self.evaluation_data_loader = evaluation_data_loader(cfg=cfgs.data, logger = self.logging)
 
+        self.time_step_number = cfgs.model.diffusion.traversable_steps
+        
         # Additional output_dir
-        self.use_traversability = cfgs.loss.use_traversability
         self.generator_type = cfgs.model.generator_type
         self.time_step_loss_buffer = []
         self.traversability_threshold = cfgs.traversability_threshold
@@ -172,7 +173,7 @@ class TractographyTrainer:
         self.loss_func = self.loss_func.to(self.device)
         
         if train:
-            with autocast(enabled=True):
+            with autocast(device_type = self.device, enabled=True):
                 output_dict = self.model(data_dict, sample=False)
                 # self.logging.info("Output dict keys : ", output_dict["points"].shape)
                 # self.logging.info("Shape of prediction : ", output_dict["prediction"].shape)
@@ -185,9 +186,9 @@ class TractographyTrainer:
             # self.logging.info("The pred is: ", output_dict["prediction"][0])
             # self.logging.info("The gt is: ", output_dict["points"][0])
 
-            output_dict[LossNames.loss] = loss 
-            # Return scaled loss for backward pass
+            output_dict['original_loss'] = output_dict[LossNames.loss].clone().detach()
             output_dict['scaled_loss'] = loss
+
 
         else:
             # For evaluation, pass ground truth for logging purposes
@@ -439,6 +440,7 @@ class TractographyTrainer:
         for iteration, data_dict in enumerate(
                 tqdm(self.training_data_loader, desc="Training Epoch {}".format(self.epoch))):
             self.iteration += 1
+            data_dict[DataDict.traversable_step] = self.time_step_number
             
             output_dict = self.step(data_dict=data_dict, train = True)
             torch.cuda.empty_cache()
@@ -466,7 +468,6 @@ class TractographyTrainer:
 
             self.logger.log_iteration(
                 iteration=self.iteration,
-                loss=loss_value,
                 metrics=output_dict,
                 epoch=self.epoch
             )
@@ -478,7 +479,7 @@ class TractographyTrainer:
             total_loss += loss_value
             num_batches += 1
     
-        epoch_avg_loss = self.logger.log_epoch(self.epoch)
+        epoch_avg_loss = self.logger.log_epoch(self.epoch,  metrics={})
 
         self.scheduler.step()
 

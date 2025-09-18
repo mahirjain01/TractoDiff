@@ -2,7 +2,6 @@ import random
 
 import numpy as np
 from typing import Union, Optional, Tuple, List
-import cv2
 import torch
 from torch import nn
 import torch.nn.functional as F

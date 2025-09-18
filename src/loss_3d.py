@@ -152,6 +152,8 @@ class Loss3D(nn.Module):
             y_hat_poses = y_hat_poses[:half_B]
             ygt = ygt[:half_B]  # to match shape
 
+
+        # print(f"The shape of ygt: {ygt.shape} and the shape for y_hat_poses : {y_hat_poses.shape}")
         path_dis = self.distance(ygt, y_hat_poses).mean()
         final_path_dis = path_dis
 

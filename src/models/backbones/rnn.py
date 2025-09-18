@@ -126,8 +126,6 @@ class RNNDiffusion(nn.Module):
     def step_gru(self, x, h):
         h_1 = self.rnn(x, h)
         output = self.out_fc(h_1) # shape = [2*B, 3]
-        print("The output is: ", output)
-        print("The h_1 is: ", h_1)
         return h_1, output 
 
     def forward(self, noisy_trajectory, time_step, global_cond, local_cond=None):

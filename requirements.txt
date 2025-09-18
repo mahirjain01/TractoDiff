@@ -1,8 +1,6 @@
 numpy==1.23
 omegaconf
 PyBresenham
-catkin_pkg
-rospkg
 opencv-python
 empy
 open3d

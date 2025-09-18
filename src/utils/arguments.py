@@ -11,7 +11,7 @@ def get_args():
                         help='only load model to continue training')
     parser.add_argument('--snapshot', type=str, default="", help='snapshot')
     parser.add_argument('--training_type', type=int, default=1, help="0: 150 epochs; 1: 10 epochs")
-    parser.add_argument('--debug_output', type=str, default="/med/TractoDiff/vis", help='snapshot')
+    parser.add_argument('--debug_output', type=str, default="/med/TractoDiff/images", help='snapshot')
 
     # data args:
     parser.add_argument('--data_root', type=str, help='root of the dataset', default="data")
@@ -22,7 +22,7 @@ def get_args():
     parser.add_argument('--generator_type', type=int, default=0, help="0: diffusion; 1: cvae")
     parser.add_argument('--diffusion_model', type=int, default=0, help="0: rnn; 1: unet")
     parser.add_argument('--crnn_type', type=int, default=0, help="0: gru; 1: lstm")
-    parser.add_argument('--use_traversability', action='store_true', default=False, help="if train traversability")
+    parser.add_argument('--use_traversability', default=False, help="if train traversability")
     parser.add_argument('--diffusion_time_steps', type=int, default=1000, help="number of diffusion timesteps for training")
 
     # GPUs

@@ -25,7 +25,7 @@ class TractographyDataset(Dataset):
         if train: 
             self.split = 'trainset'
             self.subjects = cfg.subjects[:1]
-            self.logger.info("The subjects are ", self.subjects)
+            self.logger.info(f"The subjects are {self.subjects}")
         else:
             self.split = 'testset'
             self.subjects = cfg.subjects[-1:]

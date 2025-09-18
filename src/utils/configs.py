@@ -1,7 +1,6 @@
 import math
 from os.path import join
 import numpy as np
-import yaml
 from easydict import EasyDict as edict
 
 
@@ -66,11 +65,11 @@ class GeneratorType:
 
 DatasetConfig = edict()  # Configuration of data loaders
 DatasetConfig.name = ""
-DatasetConfig.root = "/med/TractoDiff/data_sample"
+DatasetConfig.root = "/med/TractoDiff/data"
 DatasetConfig.bundle = "AF_L"
 DatasetConfig.root_path = "/med/TractoDiff/data"
 DatasetConfig.condition_path = "/med/TractoDiff/data/WMmasks"
-DatasetConfig.subjects = ["sub-1061", "sub-1159"]
+DatasetConfig.subjects = ["sub-1030", "sub-1061", "sub-1159"]
 DatasetConfig.seq_length = 16
 DatasetConfig.batch_size = 128
 DatasetConfig.num_workers = 8
@@ -116,7 +115,7 @@ Diffusion.diffusion_step_embed_dim = 256
 Diffusion.down_dims = [512, 1024, 2048]
 Diffusion.kernel_size = 5
 Diffusion.cond_predict_scale = True
-Diffusion.use_traversability = True
+Diffusion.use_traversability = False
 Diffusion.estimate_traversability = True
 Diffusion.traversable_steps = 15
 Diffusion.traversable_steps_buffer = 8
@@ -160,7 +159,7 @@ class LossNames:
 LossConfig = edict()
 LossConfig.train_poses = True
 LossConfig.scale_waypoints = 10.0
-LossConfig.use_traversability = True
+LossConfig.use_traversability = False
 LossConfig.distance_type = Hausdorff.average
 LossConfig.distance_ratio = 20.0
 LossConfig.last_ratio = 2.0

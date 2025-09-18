@@ -129,8 +129,8 @@ class Diffusion(nn.Module):
         h = self.encoder(observation)  # B x 512
         h_condition = self.trajectory_condition(h) # B x 512        
 
-        print("The h_condition shape is: ", h_condition.shape)
-        print("The h shape is: ", h.shape)
+        # print("The h_condition shape is: ", h_condition.shape)
+        # print("The h shape is: ", h.shape)
 
         # print("The h_condition shape is: ", h_condition.shape)
         output = {}
@@ -138,6 +138,7 @@ class Diffusion(nn.Module):
         noisy_trajectory, noise, time_step = self.add_trajectory_step_noise(trajectory=gt_path, traversable_step=traversable_step)
 
         if self.use_traversability:
+            print("Turning on trab")
             h_condition = torch.concat((h_condition, h_condition), dim=0)   # new shape = [2*B x 512]
         pred = self.diff_model(noisy_trajectory, time_step, local_cond=None, global_cond=h_condition)
         # print("The pred shape is: ", pred.shape)

@@ -1,32 +1,19 @@
-import copy
-import pickle
-import time
 import os
-from os.path import join, exists
-from typing import Tuple
-import subprocess
-
-from warnings import warn
+import time
 import torch
-from torch import autocast
-from torch.cuda.amp import GradScaler
-from torch.nn.parallel import DistributedDataParallel as DDP
-import torch.distributed as dist
 from tqdm import tqdm
-import os.path as osp
-from datetime import datetime, timedelta
-
-from src.utils.configs import TrainingConfig, ScheduleMethods, LossNames, LogNames, LogTypes, DataDict, GeneratorType
+from warnings import warn
+from datetime import timedelta
 from src.loss_3d import Loss3D
+import torch.distributed as dist
 from src.models.model import get_model
+from src.utils.configs import LossNames, DataDict
+from torch.nn.parallel import DistributedDataParallel as DDP
+from src.data_loader.dataset_tracto import evaluation_data_loader
 from src.utils.functions import to_device, get_device, release_cuda
-from src.data_loader.dataset_tracto import train_data_loader, evaluation_data_loader
-
 
 class Inference:
     def __init__(self, cfgs):
-
-        self.evaluation_freq = cfgs.evaluation_freq
 
         self.name = cfgs.name
         self.iteration = 0
@@ -53,7 +40,7 @@ class Inference:
 
         # model
         self.model = get_model(config=cfgs.model, device=self.device)
-        self.snapshot = "/med/TractoDiff/output_dir_1/TractoDiffsnapshot.pth.tar"
+        self.snapshot = "/med/TractoDiff/output_dir/TractoDiffsnapshot.pth.tar"
         if self.snapshot:
             state_dict = self.load_snapshot(self.snapshot)
 
@@ -65,16 +52,6 @@ class Inference:
             
         # Verify model is on correct device after setup
         self._ensure_model_on_device()
-
-        # set up loggers
-        configs = {
-            "lr": cfgs.lr,
-            "lr_t0": cfgs.lr_t0,
-            "lr_tm": cfgs.lr_tm,
-            "lr_min": cfgs.lr_min,
-            "gpus": cfgs.gpus,
-        }
-
         self.load_learning_parameters(state_dict)
 
         # loss functions
@@ -225,8 +202,7 @@ class Inference:
         """
         self._ensure_model_on_device()
         data_dict = to_device(data_dict, device=self.device)
-        
-        
+
         # For evaluation, pass ground truth for logging purposes
         output_dict = self.model(data_dict, sample=True)
         torch.cuda.empty_cache()

@@ -80,14 +80,18 @@ class TrainingLogger:
         
         self.iteration_writer.writerow(row_data)
         
-        if 'loss' in row_data:
-            self.current_epoch_losses.append(row_data['loss'])
+        if 'original_loss' in row_data:
+            self.current_epoch_losses.append(row_data['original_loss'])
     
-    def log_epoch(self, epoch: int):
+    def log_epoch(self, epoch: int, metrics: dict = None):
         """Log average loss for a completed epoch."""
         if self.current_epoch_losses:
             avg_loss = np.mean(self.current_epoch_losses)
             row_data = {'epoch': epoch, 'average_loss': avg_loss}
+            self.current_epoch_losses = [] 
+            
+            if metrics:
+                row_data.update(metrics)
             
             if self.epoch_writer is None:
                 fieldnames = list(row_data.keys())
@@ -96,8 +100,6 @@ class TrainingLogger:
                 self.epoch_writer.writeheader()
             
             self.epoch_writer.writerow(row_data)
-            self.current_epoch_losses = [] # Reset for the next epoch
-            return avg_loss
     
     def plot_losses(self, save_path=None):
         """Plots the training progress by reading the log files."""
@@ -114,10 +116,10 @@ class TrainingLogger:
         # A window of 50 iterations is a good starting point
         window_size = min(50, len(df) // 10) 
         if window_size > 0:
-            df['loss_smoothed'] = df['loss'].rolling(window=window_size, min_periods=1).mean()
+            df['loss_smoothed'] = df['original_loss'].rolling(window=window_size, min_periods=1).mean()
             plt.plot(df['iteration'], df['loss_smoothed'], label='Smoothed Training Loss')
         else:
-            plt.plot(df['iteration'], df['loss'], label='Training Loss')
+            plt.plot(df['iteration'], df['original_loss'], label='Training Loss')
 
         plt.title(f'Training Loss Over Time for {self.experiment_name}')
         plt.xlabel('Iteration')
@@ -141,16 +143,15 @@ class TrainingLogger:
             self.epoch_csv_file.close()
             
     def plot_epoch_metrics(self, save_path=None):
-        """Plots the average epoch metrics by reading the epoch log file."""
+        """Plots all collected metrics against epochs."""
         if not self.epoch_log_file.exists():
-            self.event_logger.warning("Epoch log file not found, skipping epoch plot.")
+            self.event_logger.warning("Epoch log file not found, skipping epoch metrics plot.")
             return
 
         df = pd.read_csv(self.epoch_log_file)
         
         plt.figure(figsize=(12, 6))
         
-        # Plot each metric found in the epoch log file
         for col in df.columns:
             if col != 'epoch':
                 plt.plot(df['epoch'], df[col], marker='o', linestyle='-', label=col.replace('_', ' ').title())
@@ -162,9 +163,7 @@ class TrainingLogger:
         plt.grid(True)
         plt.tight_layout()
         
-        if save_path:
-            plt.savefig(save_path)
-            self.event_logger.info(f"Epoch metrics plot saved to {save_path}")
-            plt.close()
-        else:
-            plt.show()
+        save_path = save_path or self.plots_dir / f'epoch_metrics_curve_{self.experiment_name}.png'
+        plt.savefig(save_path)
+        self.event_logger.info(f"Epoch metrics plot saved to {save_path}")
+        plt.close()

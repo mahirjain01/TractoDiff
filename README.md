@@ -1,6 +1,8 @@
 # TractoDiff
 Tractography using diffusion 
 
+conda activate tractodiff
+
 # For consistency distillation
 python3 /tracto/DTG/consistency/dtg_cm_train.py \
 --teacher_model_path /tracto/DTG/results/dtgsnapshot.pth.tar \
