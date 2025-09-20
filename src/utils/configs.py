@@ -197,10 +197,10 @@ TrainingConfig.wandb_api = ""
 TrainingConfig.only_model = False
 TrainingConfig.output_dir = "/med/TractoDiff/runs"
 TrainingConfig.snapshot = ""
-TrainingConfig.max_epoch = 150
-TrainingConfig.evaluation_freq = 5
+TrainingConfig.max_epoch = 140
+TrainingConfig.evaluation_freq = 20
 TrainingConfig.scheduler = ScheduleMethods.cosine
-TrainingConfig.lr = 3e-3
+TrainingConfig.lr = 5e-3
 TrainingConfig.weight_decay = 0
 # for cosine scheduler
 TrainingConfig.lr_t0 = 1

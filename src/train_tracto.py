@@ -482,9 +482,6 @@ class TractographyTrainer:
 
         self.scheduler.step()
 
-        # if not self.distributed or (self.distributed and self.current_rank == 0):
-        #     os.makedirs(f'{self.output_dir}/models', exist_ok=True)
-        #     self.save_snapshot('{}/models/epoch_{}.pth'.format(self.output_dir, self.epoch))
 
     def inference_epoch(self):
         self._ensure_model_on_device()
@@ -559,7 +556,6 @@ class TractographyTrainer:
                 
                 val_loss = None
                 if (self.evaluation_freq > 0) and (self.epoch + 1) % self.evaluation_freq == 0:
-                    self.logging.info(f"Validation starts now")
                     self.set_eval_mode()
                     val_loss = self.inference_epoch()
                     

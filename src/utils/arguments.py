@@ -10,7 +10,7 @@ def get_args():
     parser.add_argument('--only_load_model', action='store_true', default=False,
                         help='only load model to continue training')
     parser.add_argument('--snapshot', type=str, default="", help='snapshot')
-    parser.add_argument('--training_type', type=int, default=1, help="0: 150 epochs; 1: 10 epochs")
+    parser.add_argument('--training_type', type=int, default=1, help="0: 140 epochs; 1: 10 epochs")
 
     # data args:
     parser.add_argument('--data_root', type=str, help='root of the dataset', default="data")
@@ -88,7 +88,7 @@ def get_configuration():
 
     if args.training_type == 0:
         # Full training schedule
-        cfg.max_epoch = 150
+        cfg.max_epoch = 140
         
     elif args.training_type == 1:
         # Short debug run

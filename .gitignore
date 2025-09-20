@@ -32,6 +32,7 @@ data_sample/
 environment/
 data/
 runs/
+Trash/
 
 snapshots/*
 snapshots
