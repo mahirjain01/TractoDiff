@@ -37,6 +37,7 @@ class TractographyTrainer:
         self.epoch = 0
         self.training = False
 
+        self.num_val_batches_to_log = 3
         self.gradient_accumulation_steps = getattr(cfgs, 'gradient_accumulation_steps', 4)
         self.use_amp = getattr(cfgs, 'use_amp', True)  
         self.amp_dtype = getattr(cfgs, 'amp_dtype', torch.float16)  
@@ -72,9 +73,11 @@ class TractographyTrainer:
         self.model = get_model(config=cfgs.model, device=self.device, logger = self.logging)
         self.snapshot = cfgs.snapshot
         
+        # //////////////////////////////////////////////////////// Weight Initialisation using a pretrained model //////////////////////////////////////////////////////////
+        
         self.logging.info(f"Initializing model with pre-trained weights")
         # Load the checkpoint file
-        pretrained_checkpoint = torch.load(r"/med/TractoDiff/Baselinesnapshot.pth.tar", map_location=self.device)
+        pretrained_checkpoint = torch.load(r"/med/TractoDiff/epoch_14.pth", map_location=self.device)
         # Your checkpoints save the model weights under the key 'state_dict'
         if 'state_dict' in pretrained_checkpoint:
             model_weights = pretrained_checkpoint['state_dict']
@@ -84,6 +87,8 @@ class TractographyTrainer:
         # Load the weights into the model
         self.model.load_state_dict(model_weights)
         self.logging.info("Successfully loaded pre-trained weights into the model.")
+        
+        # ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     
         # Setup GPU/distributed training
         self.current_rank = 0
@@ -151,7 +156,7 @@ class TractographyTrainer:
                 self.load_learning_parameters(state_dict)
 
         # Setup loss function
-        self.loss_func = Loss3D(cfg=cfgs.loss, name = self.name)
+        self.loss_func = Loss3D(cfg=cfgs.loss, name = self.name, max_visualizations=30 )
         self.loss_func = self.loss_func.to(self.device)
 
         # datasets:
@@ -172,7 +177,7 @@ class TractographyTrainer:
         self.accumulated_loss = 0.0
         self.accumulation_step = 0
 
-    def step(self, data_dict, train=True) -> dict:
+    def step(self, data_dict, train=True, log_trajectory_details=False) -> dict:
         """
         One step of training/evaluation
         Args:
@@ -207,43 +212,44 @@ class TractographyTrainer:
             output_dict = self.model(data_dict, sample=True)
             torch.cuda.empty_cache()
             eval_dict = self.loss_func.evaluate(output_dict)
-            
-            gt = data_dict['points']
-            pred = output_dict['prediction']
-            
-            self.logging.info("\n=== Epoch {} Trajectory Comparison ===".format(self.epoch))
-            self.logging.info(f"{'Point':>8} {'Ground Truth':>40} {'Prediction':>40} {'Difference':>20}")
-            self.logging.info("-" * 110)
-            
-            for i in range(min(3, gt.shape[0])):  # Show first 3 trajectories
-                self.logging.info(f"\nTrajectory {i+1}:")
-                for j in range(gt.shape[1]):  # For each point in sequence
-                    gt_point = gt[i, j].cpu().numpy()
-                    pred_point = pred[i, j].cpu().numpy()
-                    diff = np.abs(gt_point - pred_point)
-                    
-                    self.logging.info(f"Point {j:2d}: "
-                          f"[{gt_point[0]:8.3f}, {gt_point[1]:8.3f}, {gt_point[2]:8.3f}] -> "
-                          f"[{pred_point[0]:8.3f}, {pred_point[1]:8.3f}, {pred_point[2]:8.3f}] "
-                          f"Diff: [{diff[0]:6.3f}, {diff[1]:6.3f}, {diff[2]:6.3f}]")
-                
-                # Calculate and show trajectory statistics
-                mean_error = np.mean(np.abs(gt[i].cpu().numpy() - pred[i].cpu().numpy()))
-                self.logging.info(f"Mean Error for Trajectory {i+1}: {mean_error:.3f}")
-            
-            self.logging.info("\n=== Overall Statistics ===")
-            total_mean_error = np.mean(np.abs(gt.cpu().numpy() - pred.cpu().numpy()))
-            self.logging.info(f"Total Mean Error: {total_mean_error:.3f}")
-            self.logging.info("=" * 110 + "\n")
-            
             output_dict.update(eval_dict)
-
-        # For inference, log diffusion model parameters
-        if not self.training and hasattr(self.model, 'generator') and hasattr(self.model.generator, 'sample'):
-            if hasattr(self.model.generator, 'time_steps'):
-                self.logging.warning(f"[DEBUG] Diffusion time_steps: {self.model.generator.time_steps}")
-            if hasattr(self.model.generator, 'sample_times'):
-                self.logging.warning(f"[DEBUG] Diffusion sample_times: {self.model.generator.sample_times}")
+            
+            if log_trajectory_details:
+            
+                gt = data_dict['points']
+                pred = output_dict['prediction']
+                
+                self.logging.info("\n=== Epoch {} Trajectory Comparison ===".format(self.epoch))
+                self.logging.info(f"{'Point':>8} {'Ground Truth':>40} {'Prediction':>40} {'Difference':>20}")
+                self.logging.info("-" * 110)
+                
+                for i in range(min(3, gt.shape[0])):  # Show first 3 trajectories
+                    self.logging.info(f"\nTrajectory {i+1}:")
+                    for j in range(gt.shape[1]):  # For each point in sequence
+                        gt_point = gt[i, j].cpu().numpy()
+                        pred_point = pred[i, j].cpu().numpy()
+                        diff = np.abs(gt_point - pred_point)
+                        
+                        self.logging.info(f"Point {j:2d}: "
+                            f"[{gt_point[0]:8.3f}, {gt_point[1]:8.3f}, {gt_point[2]:8.3f}] -> "
+                            f"[{pred_point[0]:8.3f}, {pred_point[1]:8.3f}, {pred_point[2]:8.3f}] "
+                            f"Diff: [{diff[0]:6.3f}, {diff[1]:6.3f}, {diff[2]:6.3f}]")
+                    
+                    # Calculate and show trajectory statistics
+                    mean_error = np.mean(np.abs(gt[i].cpu().numpy() - pred[i].cpu().numpy()))
+                    self.logging.info(f"Mean Error for Trajectory {i+1}: {mean_error:.3f}")
+                
+                self.logging.info("\n=== Overall Statistics ===")
+                total_mean_error = np.mean(np.abs(gt.cpu().numpy() - pred.cpu().numpy()))
+                self.logging.info(f"Total Mean Error: {total_mean_error:.3f}")
+                self.logging.info("=" * 110 + "\n")
+            
+            # For inference, log diffusion model parameters
+            if not self.training and hasattr(self.model, 'generator') and hasattr(self.model.generator, 'sample'):
+                if hasattr(self.model.generator, 'time_steps'):
+                    self.logging.warning(f"[DEBUG] Diffusion time_steps: {self.model.generator.time_steps}")
+                if hasattr(self.model.generator, 'sample_times'):
+                    self.logging.warning(f"[DEBUG] Diffusion sample_times: {self.model.generator.sample_times}")
 
         return output_dict
 
@@ -482,10 +488,11 @@ class TractographyTrainer:
 
         self.scheduler.step()
 
-
     def inference_epoch(self):
         self._ensure_model_on_device()
         device = self.device
+        
+        self.loss_func.reset_vis_counter()
         
         # Log model configuration and sampling parameters
         self.logging.info("\n===== MODEL EVALUATION CONFIGURATION =====")
@@ -511,7 +518,8 @@ class TractographyTrainer:
 
             # Ensure input data is on correct device
             data_dict = to_device(data_dict, device=device)
-            output_dict = self.step(data_dict, train=False)
+            log_details = (iteration < self.num_val_batches_to_log)
+            output_dict = self.step(data_dict, train=False, log_trajectory_details=log_details)
             torch.cuda.synchronize()
             
             epoch_metrics_list.append({

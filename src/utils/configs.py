@@ -67,7 +67,7 @@ DatasetConfig.root = "/med/TractoDiff/data"
 DatasetConfig.bundle = "AF_L"
 DatasetConfig.root_path = "/med/TractoDiff/data"
 DatasetConfig.condition_path = "/med/TractoDiff/data/WMmasks"
-DatasetConfig.subjects = ["sub-1030", "sub-1061", "sub-1159"]
+DatasetConfig.subjects = ["sub-1030"]
 DatasetConfig.seq_length = 16
 DatasetConfig.batch_size = 128
 DatasetConfig.num_workers = 8
@@ -192,7 +192,7 @@ class LogTypes:
 
 
 TrainingConfig = edict()
-TrainingConfig.name = "Baseline"
+TrainingConfig.name = ""
 TrainingConfig.wandb_api = ""
 TrainingConfig.only_model = False
 TrainingConfig.output_dir = "/med/TractoDiff/runs"

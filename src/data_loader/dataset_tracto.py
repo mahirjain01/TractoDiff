@@ -80,7 +80,7 @@ def get_dataloader(cfg, train=True, logger = None):
         sampler=sampler,
         collate_fn=partial(registration_collate_fn_stack_mode),
         worker_init_fn=reset_seed_worker_init_fn,
-        pin_memory=False,
+        pin_memory=True,
         drop_last=False,
     )
     

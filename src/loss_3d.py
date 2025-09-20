@@ -13,7 +13,7 @@ from src.models.losses.mdf import MDFLoss
 
 class Loss3D(nn.Module):
 
-    def __init__(self, cfg, name, wm_mask_path=None):
+    def __init__(self, cfg, name, wm_mask_path=None, max_visualizations=30):
         super(Loss3D, self).__init__()
 
 
@@ -35,7 +35,14 @@ class Loss3D(nn.Module):
 
         self.output_dir = os.path.join(cfg.output_dir, f"{name}/images")
         os.makedirs(self.output_dir, exist_ok=True)
+        
+        self.max_visualizations = max_visualizations
+        self.visualizations_this_epoch = 0
 
+    def reset_vis_counter(self):
+        """Resets the counter at the start of each validation epoch."""
+        self.visualizations_this_epoch = 0
+        
     # ----------------------------------------------------------------
     #                Core 3D Collisions / Traversability
     # ----------------------------------------------------------------
@@ -130,6 +137,7 @@ class Loss3D(nn.Module):
         coords_vox[:, 2] = coords_vox[:, 2].clamp(0, H-1)
 
         return coords_vox
+    
 
     def forward(self, input_dict):
 
@@ -199,18 +207,27 @@ class Loss3D(nn.Module):
         # Visualize 3D streamlines
         for idx in range(len(y_hat)):
             
-            subject_id = input_dict[DataDict.subject_id][idx]
-            bundle = input_dict[DataDict.bundle][idx]
-            vis_file = os.path.join(self.output_dir, f"streamline_vis_{subject_id}_{bundle}_{idx}.png")
-            
-            visualize_3d_streamlines(
-                predictions=y_hat[idx].detach().cpu().numpy(),
-                ground_truth=ygt[idx].detach().cpu().numpy(),
-                subject_id=subject_id,
-                bundle=bundle,
-                split="testset",
-                output_file=vis_file
-            )
+            if self.visualizations_this_epoch < self.max_visualizations:
+                subject_id = input_dict[DataDict.subject_id][idx]
+                bundle = input_dict[DataDict.bundle][idx]
+                
+                # Make a dedicated folder for visualizations
+                vis_dir = os.path.join(self.output_dir, "visualizations")
+                os.makedirs(vis_dir, exist_ok=True)
+                
+                # Add epoch to filename to avoid overwriting
+                epoch = input_dict.get('epoch', 'N_A') # You may need to pass epoch in input_dict
+                vis_file = os.path.join(vis_dir, f"epoch_{epoch}_vis_{subject_id}_{bundle}_{self.visualizations_this_epoch}.png")
+                
+                visualize_3d_streamlines(
+                    predictions=y_hat[idx].detach().cpu().numpy(),
+                    ground_truth=ygt[idx].detach().cpu().numpy(),
+                    subject_id=subject_id,
+                    bundle=bundle,
+                    split="testset",
+                    output_file=vis_file
+                )
+                self.visualizations_this_epoch += 1
 
         path_dis = self.distance(ygt, y_hat).mean()
         all_points_mse = self.target_dis(ygt, y_hat)

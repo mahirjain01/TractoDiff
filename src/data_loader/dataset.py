@@ -24,7 +24,7 @@ class TractographyDataset(Dataset):
 
         if train: 
             self.split = 'trainset'
-            self.subjects = cfg.subjects[:2]
+            self.subjects = cfg.subjects[:1]
             self.logger.info(f"The subjects are {self.subjects}")
         else:
             self.split = 'testset'
@@ -59,7 +59,7 @@ class TractographyDataset(Dataset):
                 print(f"Warning: {pkl_path} not found. Skipping subject {subject}")
                 continue
             
-            for i, streamline in enumerate(streamlines):
+            for i, streamline in enumerate(streamlines[:1000]):
                 if len(streamline) < self.seq_length:
                     continue
                 self.streamlines.append(streamline)
