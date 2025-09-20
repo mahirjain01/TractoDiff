@@ -73,7 +73,7 @@ def generate_condition_vector(point: np.ndarray, env: BaseEnv) -> np.ndarray:
     return env._format_state(point)[0]
 
 class StreamlineGenerator:
-    def __init__(self, cfg: TrainingConfig, device: str = "cuda:0", use_amp: bool = False, use_torchscript: bool = True):
+    def __init__(self, cfg, device: str = "cuda:0", use_amp: bool = False, use_torchscript: bool = True):
         self.cfg = cfg
         self.name = cfg.name
         self.iteration = 0

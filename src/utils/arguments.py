@@ -5,13 +5,12 @@ from src.utils.configs import TrainingConfig, GeneratorType, DiffusionModelType,
 
 def get_args():
     parser = argparse.ArgumentParser(description='TractoDiff Training')
-    parser.add_argument('--name', type=str, default="TractoDiff", help="name of project")
+    parser.add_argument('--name', type=str, default="Baseline", help="name of project")
     parser.add_argument('--wandb_api', type=str, default="db0123ab9f0948cf1cf4cbb182e78069983fc0ba", help="Your wandb api")
     parser.add_argument('--only_load_model', action='store_true', default=False,
                         help='only load model to continue training')
     parser.add_argument('--snapshot', type=str, default="", help='snapshot')
     parser.add_argument('--training_type', type=int, default=1, help="0: 150 epochs; 1: 10 epochs")
-    parser.add_argument('--debug_output', type=str, default="/med/TractoDiff/images", help='snapshot')
 
     # data args:
     parser.add_argument('--data_root', type=str, help='root of the dataset', default="data")
@@ -23,7 +22,7 @@ def get_args():
     parser.add_argument('--diffusion_model', type=int, default=0, help="0: rnn; 1: unet")
     parser.add_argument('--crnn_type', type=int, default=0, help="0: gru; 1: lstm")
     parser.add_argument('--use_traversability', default=False, help="if train traversability")
-    parser.add_argument('--diffusion_time_steps', type=int, default=1000, help="number of diffusion timesteps for training")
+    parser.add_argument('--diffusion_time_steps', type=int, default=500, help="number of diffusion timesteps for training")
 
     # GPUs
     parser.add_argument('--channels-last', action='store_true', default=False, help='Use channels_last memory layout')
@@ -86,7 +85,6 @@ def get_configuration():
     cfg.only_model = args.only_load_model
     cfg.snapshot = args.snapshot
     cfg.wandb_api = args.wandb_api
-    cfg.loss.output_dir = args.debug_output
 
     if args.training_type == 0:
         # Full training schedule

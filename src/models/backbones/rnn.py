@@ -143,7 +143,7 @@ class RNNDiffusion(nn.Module):
         c = torch.zeros((B, self.hidden_dim), dtype=torch.float).to(get_device(x_pre.device))
 
         outputs = []
-        for i in range(self.steps): # 16 steps =>16 GRU units to generate 16 3-d coordinates
+        for i in range(self.steps): # 16 steps => 16 GRU units to generate 16 3-d coordinates
             if self.rnn_type == RNNType.lstm:
                 h, c, output = self.step_lstm(x=x_pre, c=c, h=h)
             elif self.rnn_type == RNNType.gru:

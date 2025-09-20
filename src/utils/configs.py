@@ -43,8 +43,6 @@ class DataDict:
     ground_truth = "ground_truth"
     embedding = "embedding"
     trajetory = "trajetory"
-    zmu = "mu"
-    zvar = "logvar"
     noise = "noise"
     all_trajectories = "all_trajectories"
     all_variances = "all_variances"
@@ -172,7 +170,7 @@ LossConfig.root = "/home/jing/Documents/gn/database/datasets/regular_data"
 LossConfig.map_resolution = 0.1
 LossConfig.map_range = 300
 LossConfig.image_separate = 20
-LossConfig.output_dir = "/med/TractoDiff/images"
+LossConfig.output_dir = "/med/TractoDiff/runs"
 
 
 #########################################################################
@@ -197,12 +195,12 @@ TrainingConfig = edict()
 TrainingConfig.name = "Baseline"
 TrainingConfig.wandb_api = ""
 TrainingConfig.only_model = False
-TrainingConfig.output_dir = "/med/TractoDiff/Tracto"
+TrainingConfig.output_dir = "/med/TractoDiff/runs"
 TrainingConfig.snapshot = ""
 TrainingConfig.max_epoch = 150
-TrainingConfig.evaluation_freq = 2
+TrainingConfig.evaluation_freq = 5
 TrainingConfig.scheduler = ScheduleMethods.cosine
-TrainingConfig.lr = 3e-4
+TrainingConfig.lr = 3e-3
 TrainingConfig.weight_decay = 0
 # for cosine scheduler
 TrainingConfig.lr_t0 = 1

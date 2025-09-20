@@ -3,13 +3,13 @@ from src.utils.configs import DataDict
 from src.models.diffusion import Diffusion
 
 class HNav(nn.Module):
-    def __init__(self, config, device):
+    def __init__(self, config, device, logger = None):
         super(HNav, self).__init__()
         self.config = config
         self.device = device
 
         self.generator_type = config.generator_type
-        self.generator = Diffusion(self.config.diffusion)
+        self.generator = Diffusion(self.config.diffusion, logger = logger)
         self.generator = self.generator.to(device)
 
     def forward(self, input_dict, sample=False):
@@ -50,6 +50,6 @@ class HNav(nn.Module):
         output.update(generator_output)
         return output
 
-def get_model(config, device):
-    model = HNav(config=config, device=device)
+def get_model(config, device, logger = None):
+    model = HNav(config=config, device=device, logger = logger)
     return model.to(device)

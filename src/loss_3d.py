@@ -13,7 +13,7 @@ from src.models.losses.mdf import MDFLoss
 
 class Loss3D(nn.Module):
 
-    def __init__(self, cfg, wm_mask_path=None):
+    def __init__(self, cfg, name, wm_mask_path=None):
         super(Loss3D, self).__init__()
 
 
@@ -33,9 +33,7 @@ class Loss3D(nn.Module):
         self.distance_ratio = cfg.distance_ratio
         self.traversability_ratio = cfg.traversability_ratio
 
-        self.map_resolution = 1
-        self.map_range = cfg.map_range 
-        self.output_dir = cfg.output_dir
+        self.output_dir = os.path.join(cfg.output_dir, f"{name}/images")
         os.makedirs(self.output_dir, exist_ok=True)
 
     # ----------------------------------------------------------------
@@ -155,25 +153,20 @@ class Loss3D(nn.Module):
 
         # print(f"The shape of ygt: {ygt.shape} and the shape for y_hat_poses : {y_hat_poses.shape}")
         path_dis = self.distance(ygt, y_hat_poses).mean()
-        final_path_dis = path_dis
 
-        # Calculate sum of distances between consecutive points in y_hat_poses
-        point_diffs = y_hat_poses[:, 1:, :] - y_hat_poses[:, :-1, :]
-        segment_lengths = torch.norm(point_diffs, p=2, dim=2)
-        total_segment_length_per_path = torch.sum(segment_lengths, dim=1)
-        mean_total_segment_length = total_segment_length_per_path.mean()
+        # # Calculate sum of distances between consecutive points in y_hat_poses
+        # point_diffs = y_hat_poses[:, 1:, :] - y_hat_poses[:, :-1, :]
+        # segment_lengths = torch.norm(point_diffs, p=2, dim=2)
+        # total_segment_length_per_path = torch.sum(segment_lengths, dim=1)
+        # mean_total_segment_length = total_segment_length_per_path.mean()
         
         last_pose_dis = self.target_dis(ygt[:, -1, :], y_hat_poses[:, -1, :])
         # first_pose_dis = self.target_dis(ygt[:, 0, :], y_hat_poses[:, 0, :])
 
         all_points_mse = self.target_dis(ygt, y_hat_poses)
-        all_points_mse_mean = all_points_mse.mean()
-
-        # all_loss = self.distance_ratio * final_path_dis + 2.0 * last_pose_dis + 2.0 * all_points_mse_mean + 10.0 * mean_total_segment_length
-
-        all_loss = self.distance_ratio * path_dis +  2.0 * last_pose_dis + 20.0 * mean_total_segment_length
+        all_loss = self.distance_ratio * path_dis +  self.last_ratio * last_pose_dis + self.last_ratio * all_points_mse
         output.update({
-            LossNames.path_dis: final_path_dis,
+            LossNames.path_dis: path_dis,
             LossNames.last_dis: last_pose_dis,
         })
 
@@ -199,34 +192,36 @@ class Loss3D(nn.Module):
         return output
     
     @torch.no_grad()
-    def evaluate(self, input_dict, indices=0):
+    def evaluate(self, input_dict):
         ygt = input_dict[DataDict.points]
         y_hat = input_dict[DataDict.prediction]
 
         # Visualize 3D streamlines
-        if DataDict.bundle in input_dict:
-            subject_id = input_dict[DataDict.subject_id][0]
-            bundle = input_dict[DataDict.bundle][0]
-
-            for idx in range(len(y_hat)):
-                vis_file = os.path.join(self.output_dir, f"streamline_vis_{subject_id}_{bundle}_{indices}_{idx}.png")
-                visualize_3d_streamlines(
-                    predictions=y_hat[idx].detach().cpu().numpy(),
-                    ground_truth=ygt[idx].detach().cpu().numpy(),
-                    subject_id=subject_id,
-                    bundle=bundle,
-                    split="testset",
-                    output_file=vis_file
-                )
+        for idx in range(len(y_hat)):
+            
+            subject_id = input_dict[DataDict.subject_id][idx]
+            bundle = input_dict[DataDict.bundle][idx]
+            vis_file = os.path.join(self.output_dir, f"streamline_vis_{subject_id}_{bundle}_{idx}.png")
+            
+            visualize_3d_streamlines(
+                predictions=y_hat[idx].detach().cpu().numpy(),
+                ground_truth=ygt[idx].detach().cpu().numpy(),
+                subject_id=subject_id,
+                bundle=bundle,
+                split="testset",
+                output_file=vis_file
+            )
 
         path_dis = self.distance(ygt, y_hat).mean()
-        final_path_dis = path_dis
+        all_points_mse = self.target_dis(ygt, y_hat)
 
         last_pose_dis = self.target_dis(ygt[:, -1, :], y_hat[:, -1, :])
-        first_pose_dis = self.target_dis(ygt[:, 0, :], y_hat[:, 0, :])
+
+        all_loss = self.distance_ratio * path_dis +  self.last_ratio * last_pose_dis + self.last_ratio * all_points_mse
+        
         output = {
             LossNames.evaluate_last_dis: last_pose_dis,
-            LossNames.evaluate_path_dis: final_path_dis,
+            LossNames.evaluate_path_dis: path_dis,
         }
 
         if self.use_traversability:
@@ -239,8 +234,11 @@ class Loss3D(nn.Module):
 
             traversability_loss, traversability_values = self._local_collision_3d(y_hat,wm_mask_torch)
             traversability_loss_mean = traversability_loss.mean()
+            
+            all_loss += self.traversability_ratio * traversability_loss_mean
             output.update({LossNames.evaluate_traversability: traversability_loss_mean})
         
+        output.update({LossNames.loss: all_loss})
         return output
 
     def consistency_loss(self, output_dict, teacher_model=True, num_scales=40):
@@ -385,3 +383,5 @@ def visualize_3d_streamlines(predictions, ground_truth, subject_id, bundle, spli
         return output_file
     else:
         return fig
+
+

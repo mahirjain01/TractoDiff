@@ -15,11 +15,10 @@ from src.models.model import get_model
 from torch.utils.tensorboard import SummaryWriter
 from torch.nn.parallel import DistributedDataParallel as DDP
 from src.utils.functions import to_device, get_device, release_cuda
-from src.utils.configs import ScheduleMethods, LossNames, LogTypes, DataDict
+from src.utils.configs import ScheduleMethods, LossNames, DataDict
 from src.data_loader.dataset_tracto import train_data_loader, evaluation_data_loader
 
 from src.utils.logger import TrainingLogger
-# from src.data_loader.dataset_tracto import TractographyDataset, get_dataloader
 
 class TractographyTrainer:
     def __init__(self, cfgs):
@@ -31,7 +30,8 @@ class TractographyTrainer:
         self.name = cfgs.name
         self.max_epoch = cfgs.max_epoch
         self.evaluation_freq = cfgs.evaluation_freq
-        self.output_dir = "/med/TractoDiff/logs"
+        self.output_dir = os.path.join(cfgs.output_dir, self.name)
+        os.makedirs(self.output_dir, exist_ok=True)
 
         self.iteration = 0
         self.epoch = 0
@@ -41,16 +41,16 @@ class TractographyTrainer:
         self.use_amp = getattr(cfgs, 'use_amp', True)  
         self.amp_dtype = getattr(cfgs, 'amp_dtype', torch.float16)  
         
+        tensorboard_log_dir = os.path.join(self.output_dir)
+        self.writer = SummaryWriter(log_dir=tensorboard_log_dir)
+
         self.logger = TrainingLogger(
             output_dir=self.output_dir,
-            experiment_name=self.name
+            experiment_name=self.name,
+            tensorboard_writer=self.writer
         )
 
         self.logging = self.logger.event_logger
-
-        tensorboard_log_dir = os.path.join(self.output_dir, "tensorboard")
-        self.writer = SummaryWriter(log_dir=tensorboard_log_dir)
-        self.logging.info(f"TensorBoard logs will be saved to: {tensorboard_log_dir}")
 
         # Set up device
         if cfgs.gpus.device == "cuda":
@@ -69,9 +69,22 @@ class TractographyTrainer:
             self.distributed = cfgs.data.distributed = False
 
         # Initialize model
-        self.model = get_model(config=cfgs.model, device=self.device)
+        self.model = get_model(config=cfgs.model, device=self.device, logger = self.logging)
         self.snapshot = cfgs.snapshot
         
+        self.logging.info(f"Initializing model with pre-trained weights")
+        # Load the checkpoint file
+        pretrained_checkpoint = torch.load(r"/med/TractoDiff/Baselinesnapshot.pth.tar", map_location=self.device)
+        # Your checkpoints save the model weights under the key 'state_dict'
+        if 'state_dict' in pretrained_checkpoint:
+            model_weights = pretrained_checkpoint['state_dict']
+        else:
+            # Handle cases where the .pth file might just be the weights directly
+            model_weights = pretrained_checkpoint
+        # Load the weights into the model
+        self.model.load_state_dict(model_weights)
+        self.logging.info("Successfully loaded pre-trained weights into the model.")
+    
         # Setup GPU/distributed training
         self.current_rank = 0
         if self.device == torch.device("cpu"):
@@ -82,7 +95,6 @@ class TractographyTrainer:
         self._ensure_model_on_device()
 
         # Setup logging
-        self.output_dir = cfgs.output_dir
         configs = {
             "lr": cfgs.lr,
             "lr_t0": cfgs.lr_t0,
@@ -139,12 +151,16 @@ class TractographyTrainer:
                 self.load_learning_parameters(state_dict)
 
         # Setup loss function
-        self.loss_func = Loss3D(cfg=cfgs.loss)
+        self.loss_func = Loss3D(cfg=cfgs.loss, name = self.name)
         self.loss_func = self.loss_func.to(self.device)
 
         # datasets:
         self.training_data_loader = train_data_loader(cfg=cfgs.data, logger = self.logging)
         self.evaluation_data_loader = evaluation_data_loader(cfg=cfgs.data, logger = self.logging)
+        
+        self.best_val_loss = float('inf')
+        self.save_period = getattr(cfgs, 'save_period', 5) # Get from config, default to 5
+        self.logging.info(f"Models will be saved periodically every {self.save_period} epochs.")
 
         self.time_step_number = cfgs.model.diffusion.traversable_steps
         
@@ -156,7 +172,6 @@ class TractographyTrainer:
         self.accumulated_loss = 0.0
         self.accumulation_step = 0
 
-    # Keep all the existing methods from train.py, but modify step() to handle the new dataset format
     def step(self, data_dict, train=True) -> dict:
         """
         One step of training/evaluation
@@ -173,7 +188,7 @@ class TractographyTrainer:
         self.loss_func = self.loss_func.to(self.device)
         
         if train:
-            with autocast(device_type = self.device, enabled=True):
+            with autocast(device_type = 'cuda', enabled=False):
                 output_dict = self.model(data_dict, sample=False)
                 # self.logging.info("Output dict keys : ", output_dict["points"].shape)
                 # self.logging.info("Shape of prediction : ", output_dict["prediction"].shape)
@@ -185,10 +200,7 @@ class TractographyTrainer:
 
             # self.logging.info("The pred is: ", output_dict["prediction"][0])
             # self.logging.info("The gt is: ", output_dict["points"][0])
-
-            output_dict['original_loss'] = output_dict[LossNames.loss].clone().detach()
             output_dict['scaled_loss'] = loss
-
 
         else:
             # For evaluation, pass ground truth for logging purposes
@@ -250,19 +262,19 @@ class TractographyTrainer:
             # dist.init_process_group(backend='nccl', init_method='env://', world_size=world_size, rank=rank)
             world_size = dist.get_world_size()
             self.current_rank = dist.get_rank()
-            # self.logger.info\
+            # self.logging.info\
             print('Training in distributed mode with multiple processes, 1 GPU per process. Process %d, total %d.'
                   % (self.current_rank, world_size))
 
             # synchronizes all the threads to reach this point before moving on
             dist.barrier()
         else:
-            # self.logger.info\
+            # self.logging.info\
             print('Training with a single process on 1 GPUs.')
         assert self.current_rank >= 0, "rank is < 0"
 
         # if cfg.local_rank == 0:
-        #     self.logger.info(
+        #     self.logging.info(
         #         f'Model created, param count:{sum([m.numel() for m in self.model.parameters()])}')
 
         # move model to GPU, enable channels last layout if set
@@ -410,23 +422,6 @@ class TractographyTrainer:
         else:
             self.model = self.model.to(self.device)
     
-    def update_log(self, results, log_prefix):
-        """Logs metrics to TensorBoard for graph visualization."""
-        global_step = self.iteration
-
-        # Log learning rate separately during training
-        if log_prefix == LogTypes.train:
-            lr_value = self.scheduler.get_last_lr()[-1]
-            self.writer.add_scalar(f"{log_prefix}/learning_rate", lr_value, global_step)
-
-        # Log all other scalar metrics from the results dictionary
-        for key, value in results.items():
-            # Check if the value is a loggable scalar (a single number)
-            if torch.is_tensor(value) and value.numel() == 1:
-                self.writer.add_scalar(f"{log_prefix}/{key}", value.item(), global_step)
-            elif isinstance(value, (int, float)):
-                self.writer.add_scalar(f"{log_prefix}/{key}", value, global_step)
-
     def run_epoch(self):
         """
         run training epochs
@@ -434,8 +429,7 @@ class TractographyTrainer:
         self.optimizer.zero_grad()
         last_time = time.time()
 
-        total_loss = 0
-        num_batches = 0
+        total_loss, total_path_dis, total_last_pose_dis, num_batches = 0.0, 0.0, 0.0, 0
 
         for iteration, data_dict in enumerate(
                 tqdm(self.training_data_loader, desc="Training Epoch {}".format(self.epoch))):
@@ -463,8 +457,10 @@ class TractographyTrainer:
 
             output_dict['step_duration_sec'] = step_duration_sec
 
-            loss_value = output_dict[LossNames.loss]
-            loss_value = loss_value.item() if torch.is_tensor(loss_value) else float(loss_value)
+            total_loss += output_dict[LossNames.loss].item()
+            total_path_dis += output_dict.get(LossNames.path_dis, torch.zeros(1)).item()
+            total_last_pose_dis += output_dict.get(LossNames.last_dis, torch.zeros(1)).item()
+            num_batches += 1
 
             self.logger.log_iteration(
                 iteration=self.iteration,
@@ -473,84 +469,83 @@ class TractographyTrainer:
             )
 
             output_dict = release_cuda(output_dict)
-            self.update_log(results=output_dict, log_prefix=LogTypes.train)
             last_time = time.time()
 
-            total_loss += loss_value
-            num_batches += 1
-    
-        epoch_avg_loss = self.logger.log_epoch(self.epoch,  metrics={})
+        if num_batches > 0:
+            epoch_metrics = {
+                'average_loss': total_loss / num_batches,
+                'average_path_distance': total_path_dis / num_batches,
+                'average_last_pose_distance': total_last_pose_dis / num_batches,
+                'learning_rate': self.scheduler.get_last_lr()[-1]
+            }
+            self.logger.log_epoch(self.epoch, metrics=epoch_metrics, prefix='Train')
 
         self.scheduler.step()
 
-        # Plot loss curve after each epoch
-        loss_plot_path = os.path.join(self.output_dir, f'loss_curve_epoch_{self.epoch}.png')
-        self.logger.plot_losses(save_path=loss_plot_path)
-        
-        if not self.distributed or (self.distributed and self.current_rank == 0):
-            os.makedirs('{}/models'.format(self.output_dir), exist_ok=True)
-            self.save_snapshot('{}/models/{}_{}.pth'.format(self.output_dir, self.name, self.epoch))
+        # if not self.distributed or (self.distributed and self.current_rank == 0):
+        #     os.makedirs(f'{self.output_dir}/models', exist_ok=True)
+        #     self.save_snapshot('{}/models/epoch_{}.pth'.format(self.output_dir, self.epoch))
 
     def inference_epoch(self):
-        if (self.evaluation_freq > 0) and (self.epoch % self.evaluation_freq == 0):
-            self._ensure_model_on_device()
-            device = self.device
-            
-            # Log model configuration and sampling parameters
-            self.logging.info("\n===== MODEL EVALUATION CONFIGURATION =====")
-            self.logging.info(f"Generator type: {self.generator_type}")
-            
-            # Get diffusion parameters
-            if hasattr(self.model.generator, 'sample_times'):
-                self.logging.info(f"Sample times: {self.model.generator.sample_times}")
-            if hasattr(self.model.generator, 'time_steps'):
-                self.logging.info(f"Time steps: {self.model.generator.time_steps}")
-            if hasattr(self.model.generator, 'inference_steps'):
-                self.logging.info(f"Inference steps: {self.model.generator.inference_steps}")
-            
-            # Show model's device and mode
-            self.logging.info(f"Model device: {next(self.model.parameters()).device}")
-            self.logging.info(f"Model mode: {'eval' if not self.model.training else 'train'}")
-            self.logging.info("=========================================\n")
-            
-            # Move loss function to correct device
-            self.loss_func = self.loss_func.to(device)
-            
-            epoch_losses = []  # Store losses for this epoch
-            
-            for iteration, data_dict in enumerate(tqdm(self.evaluation_data_loader,
-                                                       desc="Evaluation Losses Epoch {}".format(self.epoch))):
-                start_time = time.time()
+        self._ensure_model_on_device()
+        device = self.device
+        
+        # Log model configuration and sampling parameters
+        self.logging.info("\n===== MODEL EVALUATION CONFIGURATION =====")
+        self.logging.info(f"Generator type: {self.generator_type}")
+        
+        # Get diffusion parameters
+        if hasattr(self.model.generator, 'sample_times'):
+            self.logging.info(f"Sample times: {self.model.generator.sample_times}")
+        if hasattr(self.model.generator, 'time_steps'):
+            self.logging.info(f"Time steps: {self.model.generator.time_steps}")
+        if hasattr(self.model.generator, 'inference_steps'):
+            self.logging.info(f"Inference steps: {self.model.generator.inference_steps}")
+        
+        # Show model's device and mode
+        self.logging.info(f"Model device: {next(self.model.parameters()).device}")
+        self.logging.info(f"Model mode: {'eval' if not self.model.training else 'train'}")
+        self.logging.info("=========================================\n")
+        
+        epoch_metrics_list = []
+        
+        for iteration, data_dict in enumerate(tqdm(self.evaluation_data_loader,
+                                                    desc="Evaluation Losses Epoch {}".format(self.epoch))):
 
-                # Ensure input data is on correct device
-                data_dict = to_device(data_dict, device=device)
-                output_dict = self.step(data_dict, train=False)
-                torch.cuda.synchronize()
-                step_time = time.time()
-                
-                # Store loss values
-                epoch_losses.append({
-                    'path_dis': output_dict[LossNames.evaluate_path_dis].item(),
-                    'total_loss': output_dict[LossNames.loss].item() if LossNames.loss in output_dict else None
-                })
-                
-                self.update_log(results=output_dict, log_prefix=LogTypes.others)
+            # Ensure input data is on correct device
+            data_dict = to_device(data_dict, device=device)
+            output_dict = self.step(data_dict, train=False)
+            torch.cuda.synchronize()
+            
+            epoch_metrics_list.append({
+                'path_dis': output_dict[LossNames.evaluate_path_dis].item(),
+                'last_pose_dis' : output_dict[LossNames.evaluate_last_dis].item(),
+                'total_loss': output_dict[LossNames.loss].item() if LossNames.loss in output_dict else None
+            })
+            
+            output_dict = release_cuda(output_dict)
 
-                output_dict = release_cuda(output_dict)
-                torch.cuda.empty_cache()
+        if epoch_metrics_list:
+            avg_path_dis = np.mean([m['path_dis'] for m in epoch_metrics_list])
+            avg_last_pos_dis = np.mean([m['last_pose_dis'] for m in epoch_metrics_list])
+            valid_losses = [m['total_loss'] for m in epoch_metrics_list if m['total_loss'] is not None]
+            avg_total_loss = np.mean(valid_losses) if valid_losses else 0.0
+            
+            eval_metrics = {
+                'average_loss': avg_total_loss,
+                'average_path_distance': avg_path_dis,
+                'average_last_pose_distance' : avg_last_pos_dis
+            }
 
-            # Print summary statistics
-            avg_path_dis = np.mean([l['path_dis'] for l in epoch_losses])
-            self.logging.info(f"\nEpoch {self.epoch} Average Path Distance: {avg_path_dis:.4f}")
-            if epoch_losses[0]['total_loss'] is not None:
-                avg_total_loss = np.mean([l['total_loss'] for l in epoch_losses])
-                self.logging.info(f"Epoch {self.epoch} Average Total Loss: {avg_total_loss:.4f}")
-
+            self.logger.log_epoch(self.epoch, metrics=eval_metrics, prefix='Validation')
+            return eval_metrics.get('average_loss')
+            
     def run(self):
         """
         run the training process
         """
         torch.autograd.set_detect_anomaly(True)
+        
         try:
             for self.epoch in range(self.epoch, self.max_epoch, 1):
 
@@ -562,17 +557,34 @@ class TractographyTrainer:
                         
                 self.run_epoch()
                 
+                val_loss = None
                 if (self.evaluation_freq > 0) and (self.epoch + 1) % self.evaluation_freq == 0:
+                    self.logging.info(f"Validation starts now")
                     self.set_eval_mode()
-                    self.inference_epoch()
+                    val_loss = self.inference_epoch()
+                    
+                if not self.distributed or self.current_rank == 0:
+                    os.makedirs(f'{self.output_dir}/models', exist_ok=True)
+                    
+                    # 1. Save the best model based on validation loss
+                    if val_loss is not None and val_loss < self.best_val_loss:
+                        self.best_val_loss = val_loss
+                        save_path = f'{self.output_dir}/models/best_model.pth'
+                        self.logging.info(
+                            f"\nNew best model found! Loss: {self.best_val_loss:.4f} at epoch {self.epoch}. Saving to {save_path}\n"
+                        )
+                        self.save_snapshot(save_path)
+
+                    # 2. Save periodically
+                    if (self.epoch + 1) % self.save_period == 0:
+                        save_path = f'{self.output_dir}/models/epoch_{self.epoch}.pth'
+                        self.logging.info(
+                            f"\nPeriodic save at epoch {self.epoch}. Saving to {save_path}\n"
+                        )
+                        self.save_snapshot(save_path)
     
         finally:
-            # Create final loss plot with a distinctive name
-            final_plot_path = os.path.join(self.output_dir, f'{self.name}_final_loss_curve.png')
-            self.logger.plot_losses(save_path=final_plot_path)
-            
-            final_epoch_plot_path = os.path.join(self.output_dir, f'{self.name}_epoch_metrics_curve.png')
-            self.logger.plot_epoch_metrics(save_path=final_epoch_plot_path)
-            
-            self.cleanup()
+            self.logging.info("Training finished. Generating final epoch metrics plots...")
+            self.logger.plot_epoch_metrics()
 
+            self.cleanup()

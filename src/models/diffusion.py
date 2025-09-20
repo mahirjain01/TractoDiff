@@ -9,9 +9,10 @@ from src.utils.configs import DataDict, DiffusionModelType
 
 
 class Diffusion(nn.Module):
-    def __init__(self, cfg, activation_func=nn.Softsign):
+    def __init__(self, cfg, activation_func=nn.Softsign, logger = None):
         super(Diffusion, self).__init__()
         self.model_type = cfg.model_type
+        self.logger = logger
         # self.diffusion_type = cfg.diffusion_type
         self.noise_scheduler = DDPMScheduler(beta_start=cfg.beta_start, beta_end=cfg.beta_end,
                                              prediction_type="sample", num_train_timesteps=cfg.num_train_timesteps,
@@ -100,7 +101,7 @@ class Diffusion(nn.Module):
 
     def add_trajectory_step_noise(self, trajectory, traversable_step=None):
 
-        # print("use_traversability inside add_trajectory_step_noise:", self.use_traversability)
+        # self.logger.info("use_traversability inside add_trajectory_step_noise:", self.use_traversability)
 
         device = trajectory.device
         # Ensure scheduler is on the right device
@@ -129,19 +130,21 @@ class Diffusion(nn.Module):
         h = self.encoder(observation)  # B x 512
         h_condition = self.trajectory_condition(h) # B x 512        
 
-        # print("The h_condition shape is: ", h_condition.shape)
-        # print("The h shape is: ", h.shape)
+        # self.logger.info("The h_condition shape is: ", h_condition.shape)
+        # self.logger.info("The h shape is: ", h.shape)
 
-        # print("The h_condition shape is: ", h_condition.shape)
+        # self.logger.info("The h_condition shape is: ", h_condition.shape)
         output = {}
 
         noisy_trajectory, noise, time_step = self.add_trajectory_step_noise(trajectory=gt_path, traversable_step=traversable_step)
 
         if self.use_traversability:
-            print("Turning on trab")
+            self.logger.info("Calculating traversibilty loss")
             h_condition = torch.concat((h_condition, h_condition), dim=0)   # new shape = [2*B x 512]
+        
         pred = self.diff_model(noisy_trajectory, time_step, local_cond=None, global_cond=h_condition)
-        # print("The pred shape is: ", pred.shape)
+        # self.logger.info("The pred shape is: ", pred.shape)
+        
         output.update({
             DataDict.prediction: pred,
             DataDict.noise: noise,
