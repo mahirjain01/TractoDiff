@@ -20,7 +20,7 @@ class Loss3D(nn.Module):
         self.generator_type = cfg.generator_type
         self.use_traversability = cfg.use_traversability 
         self.collision_distance = 0.09
-
+        
         self.target_dis = nn.MSELoss(reduction="mean")
         self.distance = HausdorffLoss(mode=cfg.distance_type)
         self.chamfer_loss = ChamferLoss()
@@ -139,7 +139,7 @@ class Loss3D(nn.Module):
         return coords_vox
     
 
-    def forward(self, input_dict):
+    def forward(self, input_dict, norm_mean, norm_std):
 
         ygt = input_dict[DataDict.points]     # shape [B, N, 3]
         y_hat = input_dict[DataDict.prediction]
@@ -148,7 +148,8 @@ class Loss3D(nn.Module):
         # print("Shape of groundtruth: ", ygt.shape)
         # print("Shape of prediction: ", y_hat.shape)
         output = {}
-        y_hat_poses = y_hat
+        # y_hat_poses = torch.cumsum(y_hat, dim=1) 
+        y_hat_poses = y_hat 
 
         if self.use_traversability:
             B = y_hat_poses.shape[0]
@@ -173,6 +174,7 @@ class Loss3D(nn.Module):
 
         all_points_mse = self.target_dis(ygt, y_hat_poses)
         all_loss = self.distance_ratio * path_dis +  self.last_ratio * last_pose_dis + self.last_ratio * all_points_mse
+
         output.update({
             LossNames.path_dis: path_dis,
             LossNames.last_dis: last_pose_dis,
@@ -180,6 +182,15 @@ class Loss3D(nn.Module):
 
         if self.use_traversability:
             sub_id = subject_id
+            
+            if norm_mean is None or norm_std is None:
+                raise ValueError("Normalization stats (mean, std) must be provided for traversability loss.")
+            
+            # Denormalize the predicted path to get real-world coordinates
+            mean = norm_mean.view(1, 1, 3)
+            std = norm_std.view(1, 1, 3)
+            y_hat_poses_denormalized = (y_hat_poses * std) + mean
+        
             wm_mask_path = f"/med/TractoDiff/data/trainset/{sub_id}/{sub_id}-generated_approximated_mask.nii.gz"
             
             if not os.path.exists(wm_mask_path):
@@ -200,39 +211,49 @@ class Loss3D(nn.Module):
         return output
     
     @torch.no_grad()
-    def evaluate(self, input_dict):
+    def evaluate(self, input_dict, norm_mean, norm_std):
+        
         ygt = input_dict[DataDict.points]
         y_hat = input_dict[DataDict.prediction]
-
+        
+        y_hat_poses = y_hat 
+        # y_hat_poses = torch.cumsum(y_hat, dim=1) 
+        
         # Visualize 3D streamlines
-        for idx in range(len(y_hat)):
+        for idx in range(len(y_hat_poses)):
             
             if self.visualizations_this_epoch < self.max_visualizations:
                 subject_id = input_dict[DataDict.subject_id][idx]
                 bundle = input_dict[DataDict.bundle][idx]
                 
                 # Make a dedicated folder for visualizations
-                vis_dir = os.path.join(self.output_dir, "visualizations")
+                vis_dir = os.path.join(self.output_dir)
                 os.makedirs(vis_dir, exist_ok=True)
                 
                 # Add epoch to filename to avoid overwriting
                 epoch = input_dict.get('epoch', 'N_A') # You may need to pass epoch in input_dict
                 vis_file = os.path.join(vis_dir, f"epoch_{epoch}_vis_{subject_id}_{bundle}_{self.visualizations_this_epoch}.png")
                 
+                mean = norm_mean.view(1, 1, 3)
+                std = norm_std.view(1, 1, 3)
+                
+                gt_denormalized = (ygt * std) + mean
+                pred_denormalized = (y_hat * std) + mean
+                
                 visualize_3d_streamlines(
-                    predictions=y_hat[idx].detach().cpu().numpy(),
-                    ground_truth=ygt[idx].detach().cpu().numpy(),
+                    predictions=pred_denormalized[idx].detach().cpu().numpy(),
+                    ground_truth=gt_denormalized[idx].detach().cpu().numpy(),
                     subject_id=subject_id,
                     bundle=bundle,
-                    split="testset",
+                    split="trainset",
                     output_file=vis_file
                 )
                 self.visualizations_this_epoch += 1
 
-        path_dis = self.distance(ygt, y_hat).mean()
-        all_points_mse = self.target_dis(ygt, y_hat)
+        path_dis = self.distance(ygt, y_hat_poses).mean()
+        all_points_mse = self.target_dis(ygt, y_hat_poses)
 
-        last_pose_dis = self.target_dis(ygt[:, -1, :], y_hat[:, -1, :])
+        last_pose_dis = self.target_dis(ygt[:, -1, :], y_hat_poses[:, -1, :])
 
         all_loss = self.distance_ratio * path_dis +  self.last_ratio * last_pose_dis + self.last_ratio * all_points_mse
         
@@ -243,13 +264,13 @@ class Loss3D(nn.Module):
 
         if self.use_traversability:
             subject_id = input_dict[DataDict.subject_id][0]
-            wm_mask_path = f"/med/TractoDiff/data/testset/{subject_id}/{subject_id}-generated_approximated_mask.nii.gz"
+            wm_mask_path = f"/med/TractoDiff/data/trainset/{subject_id}/{subject_id}-generated_approximated_mask.nii.gz"
 
             wm_nifti = nib.load(wm_mask_path)
             wm_data = wm_nifti.get_fdata()
-            wm_mask_torch = torch.from_numpy(wm_data).bool().to(y_hat.device)
+            wm_mask_torch = torch.from_numpy(wm_data).bool().to(y_hat_poses.device)
 
-            traversability_loss, traversability_values = self._local_collision_3d(y_hat,wm_mask_torch)
+            traversability_loss, traversability_values = self._local_collision_3d(y_hat_poses,wm_mask_torch)
             traversability_loss_mean = traversability_loss.mean()
             
             all_loss += self.traversability_ratio * traversability_loss_mean
@@ -288,7 +309,7 @@ class Loss3D(nn.Module):
         return loss_dict
 
 
-def visualize_3d_streamlines(predictions, ground_truth, subject_id, bundle, split="testset", output_file=None, context_tractogram=None):
+def visualize_3d_streamlines(predictions, ground_truth, subject_id, bundle, split="trainset", output_file=None, context_tractogram=None):
     """
     Create a 3D visualization of predicted and ground truth streamlines.
     
@@ -297,7 +318,7 @@ def visualize_3d_streamlines(predictions, ground_truth, subject_id, bundle, spli
         ground_truth: [N, 3] array of ground truth streamline points
         subject_id: Subject ID for loading original tractogram
         bundle: Bundle name
-        split: Data split ('trainset', 'testset')
+        split: Data split ('trainset', 'trainset')
         output_file: Path to save the output image
         context_tractogram: Optional pre-loaded tractogram for context
     

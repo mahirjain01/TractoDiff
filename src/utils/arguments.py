@@ -88,11 +88,11 @@ def get_configuration():
 
     if args.training_type == 0:
         # Full training schedule
-        cfg.max_epoch = 140
+        cfg.max_epoch = 100
         
     elif args.training_type == 1:
         # Short debug run
-        cfg.max_epoch = 10
+        cfg.max_epoch = 50
         
     else:
         raise ValueError("the data type is not defined")

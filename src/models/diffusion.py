@@ -9,14 +9,14 @@ from src.utils.configs import DataDict, DiffusionModelType
 
 
 class Diffusion(nn.Module):
-    def __init__(self, cfg, activation_func=nn.Softsign, logger = None):
+    def __init__(self, cfg, activation_func=None, logger = None):
         super(Diffusion, self).__init__()
         self.model_type = cfg.model_type
         self.logger = logger
         # self.diffusion_type = cfg.diffusion_type
-        self.noise_scheduler = DDPMScheduler(beta_start=cfg.beta_start, beta_end=cfg.beta_end,
+        self.noise_scheduler = DDIMScheduler(beta_start=cfg.beta_start, beta_end=cfg.beta_end,
                                              prediction_type="sample", num_train_timesteps=cfg.num_train_timesteps,
-                                             clip_sample_range=cfg.clip_sample_range, clip_sample=cfg.clip_sample,
+                                             clip_sample_range=cfg.clip_sample_range, clip_sample=True,
                                              beta_schedule=cfg.beta_schedule)
        
         # Initialize scheduler timesteps to None, will be set properly in sample()
@@ -26,27 +26,11 @@ class Diffusion(nn.Module):
         self.estimate_traversability = cfg.estimate_traversability
         self.traversable_steps = cfg.traversable_steps
 
-        # /////////////////////////////////////////////////// CHANGED FOR TRACTO ///////////////////////////////////////////////////
-        self.zd = 512 
-        self.waypoint_dim = 3
-        self.diffusion_step_embed_dim = 256
-        cfg.perception_in = 346
-        # /////////////////////////////////////////////////// CHANGED FOR TRACTO ///////////////////////////////////////////////////
+        self.diffusion_step_embed_dim = 128
+        condition_dim = 346
         
         self.waypoints_num = cfg.waypoints_num
-       
-        if activation_func is None:
-            self.encoder = nn.Sequential(nn.Linear(cfg.perception_in, 1024), nn.LeakyReLU(0.1),
-                                         nn.Linear(1024, 2048), nn.LeakyReLU(0.2),
-                                         nn.Linear(2048, 512), nn.LeakyReLU(0.2),
-                                         nn.Linear(512, self.zd), nn.LeakyReLU(0.2))
-        else:
-            self.encoder = nn.Sequential(nn.Linear(cfg.perception_in, 1024), activation_func(),
-                                         nn.Linear(1024, 2048), activation_func(),
-                                         nn.Linear(2048, 512), activation_func(),
-                                         nn.Linear(512, self.zd), activation_func())
-            
-        self.trajectory_condition = nn.Linear(self.zd, self.zd)
+        self.trajectory_condition = nn.Linear(condition_dim, self.zd)
 
         if self.model_type == DiffusionModelType.crnn:
             rnn_threshold = cfg.rnn_output_threshold
@@ -101,8 +85,6 @@ class Diffusion(nn.Module):
 
     def add_trajectory_step_noise(self, trajectory, traversable_step=None):
 
-        # self.logger.info("use_traversability inside add_trajectory_step_noise:", self.use_traversability)
-
         device = trajectory.device
         # Ensure scheduler is on the right device
         self._ensure_scheduler_on_device(device)
@@ -127,11 +109,7 @@ class Diffusion(nn.Module):
         return noisy_trajectory, noise, time_step # Basicually the batch size doubles for computing trav loss
 
     def forward(self, observation, gt_path=None, traversable_step=None):
-        h = self.encoder(observation)  # B x 512
-        h_condition = self.trajectory_condition(h) # B x 512        
-
-        # self.logger.info("The h_condition shape is: ", h_condition.shape)
-        # self.logger.info("The h shape is: ", h.shape)
+        h_condition = self.trajectory_condition(observation) # B x 256    
 
         # self.logger.info("The h_condition shape is: ", h_condition.shape)
         output = {}
@@ -140,11 +118,9 @@ class Diffusion(nn.Module):
 
         if self.use_traversability:
             self.logger.info("Calculating traversibilty loss")
-            h_condition = torch.concat((h_condition, h_condition), dim=0)   # new shape = [2*B x 512]
+            h_condition = torch.concat((h_condition, h_condition), dim=0)   # new shape = [2*B x 256]
         
-        pred = self.diff_model(noisy_trajectory, time_step, local_cond=None, global_cond=h_condition)
-        # self.logger.info("The pred shape is: ", pred.shape)
-        
+        pred = self.diff_model(noisy_trajectory, time_step, local_cond=None, global_cond=h_condition)        
         output.update({
             DataDict.prediction: pred,
             DataDict.noise: noise,
@@ -154,8 +130,7 @@ class Diffusion(nn.Module):
 
     @torch.no_grad()
     def sample(self, observation):
-        h = self.encoder(observation)  # B x 512
-        h_condition = self.trajectory_condition(h)
+        h_condition = self.trajectory_condition(observation) # B x 256
 
         B, C = h_condition.shape
         trajectory = torch.randn(size=(h_condition.shape[0], self.waypoints_num, self.waypoint_dim),
@@ -165,9 +140,7 @@ class Diffusion(nn.Module):
         
         # Ensure scheduler tensors are on the correct device
         self._ensure_scheduler_on_device(h_condition.device)
-        
         scheduler.set_timesteps(self.time_steps)
-        # Make sure timesteps are on the same device as the model
         scheduler.timesteps = scheduler.timesteps.to(h_condition.device)
         
         for t in scheduler.timesteps:

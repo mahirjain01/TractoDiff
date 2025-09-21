@@ -115,6 +115,7 @@ class TrainingLogger:
             metrics_to_plot = [col for col in df.columns if col not in ['epoch', 'type']]
             
             output_folder = os.path.join(self.output_dir, 'Plots')
+            os.makedirs(output_folder, exist_ok=True)
             
             for metric in metrics_to_plot:
                 plt.figure(figsize=(10, 5))
@@ -130,8 +131,7 @@ class TrainingLogger:
                 plt.grid(True)
                 plt.tight_layout()
                 
-
-                plot_path = output_folder / f'{metric}.png'
+                plot_path = os.path.join(output_folder, f'{metric}.png')
                 plt.savefig(plot_path)
                 self.event_logger.info(f"Saved epoch plot for '{metric}' to {plot_path}")
                 plt.close()

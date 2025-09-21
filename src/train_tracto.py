@@ -16,7 +16,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.nn.parallel import DistributedDataParallel as DDP
 from src.utils.functions import to_device, get_device, release_cuda
 from src.utils.configs import ScheduleMethods, LossNames, DataDict
-from src.data_loader.dataset_tracto import train_data_loader, evaluation_data_loader
+from src.data_loader.dataset_tracto import train_data_loader, evaluation_data_loader, get_dataloaders
 
 from src.utils.logger import TrainingLogger
 
@@ -75,18 +75,18 @@ class TractographyTrainer:
         
         # //////////////////////////////////////////////////////// Weight Initialisation using a pretrained model //////////////////////////////////////////////////////////
         
-        self.logging.info(f"Initializing model with pre-trained weights")
-        # Load the checkpoint file
-        pretrained_checkpoint = torch.load(r"/med/TractoDiff/epoch_14.pth", map_location=self.device)
-        # Your checkpoints save the model weights under the key 'state_dict'
-        if 'state_dict' in pretrained_checkpoint:
-            model_weights = pretrained_checkpoint['state_dict']
-        else:
-            # Handle cases where the .pth file might just be the weights directly
-            model_weights = pretrained_checkpoint
-        # Load the weights into the model
-        self.model.load_state_dict(model_weights)
-        self.logging.info("Successfully loaded pre-trained weights into the model.")
+        # self.logging.info(f"Initializing model with pre-trained weights")
+        # # Load the checkpoint file
+        # pretrained_checkpoint = torch.load(r"/med/TractoDiff/best_model.pth", map_location=self.device)
+        # # Your checkpoints save the model weights under the key 'state_dict'
+        # if 'state_dict' in pretrained_checkpoint:
+        #     model_weights = pretrained_checkpoint['state_dict']
+        # else:
+        #     # Handle cases where the .pth file might just be the weights directly
+        #     model_weights = pretrained_checkpoint
+        # # Load the weights into the model
+        # self.model.load_state_dict(model_weights)
+        # self.logging.info("Successfully loaded pre-trained weights into the model.")
         
         # ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     
@@ -156,12 +156,20 @@ class TractographyTrainer:
                 self.load_learning_parameters(state_dict)
 
         # Setup loss function
-        self.loss_func = Loss3D(cfg=cfgs.loss, name = self.name, max_visualizations=30 )
+        self.loss_func = Loss3D(cfg=cfgs.loss, name = self.name, max_visualizations=30)
         self.loss_func = self.loss_func.to(self.device)
 
         # datasets:
-        self.training_data_loader = train_data_loader(cfg=cfgs.data, logger = self.logging)
-        self.evaluation_data_loader = evaluation_data_loader(cfg=cfgs.data, logger = self.logging)
+        self.training_data_loader, self.evaluation_data_loader = get_dataloaders(
+            cfg=cfgs.data,
+            logger=self.logging
+        )
+        self.norm_mean = self.training_data_loader.dataset.mean.to(self.device)
+        self.norm_std = self.training_data_loader.dataset.std.to(self.device)
+        self.logging.info(f"Stored normalization mean: {self.norm_mean.tolist()}")
+        self.logging.info(f"Stored normalization std: {self.norm_std.tolist()}")
+        # self.training_data_loader = train_data_loader(cfg=cfgs.data, logger = self.logging)
+        # self.evaluation_data_loader = evaluation_data_loader(cfg=cfgs.data, logger = self.logging)
         
         self.best_val_loss = float('inf')
         self.save_period = getattr(cfgs, 'save_period', 5) # Get from config, default to 5
@@ -199,7 +207,7 @@ class TractographyTrainer:
                 # self.logging.info("Shape of prediction : ", output_dict["prediction"].shape)
                 torch.cuda.empty_cache()
 
-                loss_dict = self.loss_func(output_dict)
+                loss_dict = self.loss_func(output_dict, self.norm_mean, self.norm_std)
                 output_dict.update(loss_dict)
                 loss = output_dict[LossNames.loss] / self.gradient_accumulation_steps
 
@@ -211,23 +219,37 @@ class TractographyTrainer:
             # For evaluation, pass ground truth for logging purposes
             output_dict = self.model(data_dict, sample=True)
             torch.cuda.empty_cache()
-            eval_dict = self.loss_func.evaluate(output_dict)
+            
+            gt_normalized = data_dict['points']
+            pred_normalized = output_dict['prediction']
+            
+            mean = self.norm_mean.view(1, 1, 3)
+            std = self.norm_std.view(1, 1, 3)
+            
+            gt_denormalized = (gt_normalized * std) + mean
+            pred_denormalized = (pred_normalized * std) + mean
+            
+            denormalized_dict = {
+                'points': data_dict['points'],        # Ground truth in real-world coords
+                'prediction': output_dict['prediction'],  # Prediction in real-world coords
+                'subject_id': data_dict['subject_id'], # Pass other info through
+                'bundle': data_dict['bundle']
+            }
+            
+            eval_dict = self.loss_func.evaluate(denormalized_dict, self.norm_mean, self.norm_std)
             output_dict.update(eval_dict)
             
             if log_trajectory_details:
-            
-                gt = data_dict['points']
-                pred = output_dict['prediction']
-                
+                 
                 self.logging.info("\n=== Epoch {} Trajectory Comparison ===".format(self.epoch))
                 self.logging.info(f"{'Point':>8} {'Ground Truth':>40} {'Prediction':>40} {'Difference':>20}")
                 self.logging.info("-" * 110)
                 
-                for i in range(min(3, gt.shape[0])):  # Show first 3 trajectories
+                for i in range(min(3, gt_denormalized.shape[0])):  # Show first 3 trajectories
                     self.logging.info(f"\nTrajectory {i+1}:")
-                    for j in range(gt.shape[1]):  # For each point in sequence
-                        gt_point = gt[i, j].cpu().numpy()
-                        pred_point = pred[i, j].cpu().numpy()
+                    for j in range(gt_denormalized.shape[1]):  # For each point in sequence
+                        gt_point = gt_denormalized[i, j].cpu().numpy()
+                        pred_point = pred_denormalized[i, j].cpu().numpy()
                         diff = np.abs(gt_point - pred_point)
                         
                         self.logging.info(f"Point {j:2d}: "
@@ -236,21 +258,14 @@ class TractographyTrainer:
                             f"Diff: [{diff[0]:6.3f}, {diff[1]:6.3f}, {diff[2]:6.3f}]")
                     
                     # Calculate and show trajectory statistics
-                    mean_error = np.mean(np.abs(gt[i].cpu().numpy() - pred[i].cpu().numpy()))
+                    mean_error = np.mean(np.abs(gt_denormalized[i].cpu().numpy() - pred_denormalized[i].cpu().numpy()))
                     self.logging.info(f"Mean Error for Trajectory {i+1}: {mean_error:.3f}")
                 
                 self.logging.info("\n=== Overall Statistics ===")
-                total_mean_error = np.mean(np.abs(gt.cpu().numpy() - pred.cpu().numpy()))
+                total_mean_error = np.mean(np.abs(gt_denormalized.cpu().numpy() - pred_denormalized.cpu().numpy()))
                 self.logging.info(f"Total Mean Error: {total_mean_error:.3f}")
                 self.logging.info("=" * 110 + "\n")
             
-            # For inference, log diffusion model parameters
-            if not self.training and hasattr(self.model, 'generator') and hasattr(self.model.generator, 'sample'):
-                if hasattr(self.model.generator, 'time_steps'):
-                    self.logging.warning(f"[DEBUG] Diffusion time_steps: {self.model.generator.time_steps}")
-                if hasattr(self.model.generator, 'sample_times'):
-                    self.logging.warning(f"[DEBUG] Diffusion sample_times: {self.model.generator.sample_times}")
-
         return output_dict
 
     def _set_model_gpus(self, cfg):
@@ -448,6 +463,9 @@ class TractographyTrainer:
             self.scaler.scale(scaled_loss).backward()
 
             if (iteration + 1) % self.gradient_accumulation_steps == 0:
+                self.scaler.unscale_(self.optimizer)
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+                
                 # Unscale gradients and step the optimizer
                 self.scaler.step(self.optimizer)
                 

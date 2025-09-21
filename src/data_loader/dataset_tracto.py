@@ -65,8 +65,11 @@ def get_dataloader(cfg, train=True, logger = None):
     Returns:
         DataLoader: PyTorch DataLoader
     """
-    dataset = TractographyDataset(cfg=cfg, train=train,  logger = logger)
+    dataset = TractographyDataset(cfg=cfg, train=train, logger=logger)
     sampler = DistributedSampler(dataset) if cfg.distributed else None
+    
+    if not train:
+        dataset.set_stats(train_dataset.mean, train_dataset.std) 
     
     shuffle = False
     if(train):
@@ -85,6 +88,55 @@ def get_dataloader(cfg, train=True, logger = None):
     )
     
     return dataloader
+
+def get_dataloaders(cfg, logger=None):
+    """
+    Creates and returns the training and evaluation dataloaders.
+
+    This function ensures that the evaluation dataset is normalized using
+    statistics computed from the training dataset.
+
+    Args:
+        cfg (object): The configuration object for the dataset.
+        logger (object, optional): A logger instance.
+
+    Returns:
+        tuple: A tuple containing (training_dataloader, evaluation_dataloader).
+    """
+    train_dataset = TractographyDataset(cfg=cfg, train=True, logger=logger)
+
+    eval_dataset = TractographyDataset(cfg=cfg, train=False, logger=logger)
+    
+    eval_dataset.set_stats(train_dataset.mean, train_dataset.std)
+
+    train_sampler = DistributedSampler(train_dataset) if cfg.distributed else None
+    eval_sampler = DistributedSampler(eval_dataset, shuffle=False) if cfg.distributed else None
+
+    train_dataloader = DataLoader(
+        dataset=train_dataset,
+        batch_size=cfg.batch_size,
+        num_workers=cfg.num_workers,
+        shuffle=(train_sampler is None),
+        sampler=train_sampler,
+        collate_fn=registration_collate_fn_stack_mode,
+        worker_init_fn=reset_seed_worker_init_fn,
+        pin_memory=True,
+        drop_last=True,
+    )
+
+    eval_dataloader = DataLoader(
+        dataset=eval_dataset,
+        batch_size=cfg.batch_size,
+        num_workers=cfg.num_workers,
+        shuffle=False, 
+        sampler=eval_sampler,
+        collate_fn=registration_collate_fn_stack_mode,
+        worker_init_fn=reset_seed_worker_init_fn,
+        pin_memory=True,
+        drop_last=False,
+    )
+
+    return train_dataloader, eval_dataloader
 
 def train_data_loader(cfg, logger = None):
     """

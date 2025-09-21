@@ -41,6 +41,12 @@ try:
     from src.utils.configs import DataDict, TrainingConfig
     from src.loss_3d import Loss3D, visualize_3d_streamlines
     from environments.env import BaseEnv
+    from TrackToLearn.environments.noisy_tracker import (
+        BackwardNoisyTracker,
+        NoisyTracker)
+    from TrackToLearn.environments.tracker import (
+        BackwardTracker,
+        Tracker)
 except ImportError as e:
     print(f"Error importing project-specific modules: {e}")
     print("Ensure the script is run from a location where 'src' and 'environments' are accessible,")
@@ -271,6 +277,10 @@ class StreamlineGenerator:
             terminate[in_bounds_indices[~mask_values]] = True
 
         return terminate
+    
+    def check_termination_conditions_vectorized(env):
+
+        return
 
 
     def generate_streamlines_batch(self, seed_points_batch, subject_id, bundle, dataset_file, wm_mask, wm_affine, max_steps=75, max_segment_points=16):
@@ -417,7 +427,20 @@ class StreamlineGenerator:
         print("\nInitializing environment...")
         try:
             # Simplified env parameters based on original script, adjust if needed
-            self.env = BaseEnv(
+            # self.env = BaseEnv(
+            #     dataset_file=args.dataset_file,
+            #     wm_loc=args.wm_loc,        # Provide WM location to env if needed
+            #     subject_id=args.subject,   # Env might use subject ID
+            #     step_size=0.2,             # Example value, adjust if critical
+            #     max_length=args.max_steps, # Use max_steps from args
+            #     n_signal=1, n_dirs=8, max_angle=60, min_length=10,
+            #     n_seeds_per_voxel=1, # Set to 1 as we provide seeds explicitly
+            #     rng=np.random.RandomState(1337),
+            #     add_neighborhood=1.5,
+            #     compute_reward=False, # No reward needed for generation
+            #     device="cpu", # Env operations likely on CPU, model is on self.device
+            # )
+            self.env = Tracker(
                 dataset_file=args.dataset_file,
                 wm_loc=args.wm_loc,        # Provide WM location to env if needed
                 subject_id=args.subject,   # Env might use subject ID

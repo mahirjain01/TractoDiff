@@ -100,11 +100,11 @@ Diffusion = edict()
 Diffusion.beta_start = 0.0001
 Diffusion.beta_end = 0.02
 Diffusion.beta_schedule = "squaredcos_cap_v2"
-Diffusion.clip_sample = True  # default clip range = 1
+Diffusion.clip_sample = False  # default clip range = 1
 Diffusion.clip_sample_range = 0.5  # default clip range = 1
-Diffusion.num_train_timesteps = 250
+Diffusion.num_train_timesteps = 500
 Diffusion.variance_type = "fixed_small"
-Diffusion.diffusion_zd = 512
+Diffusion.diffusion_zd = 256
 Diffusion.waypoint_dim = 3
 Diffusion.waypoints_num = 16
 Diffusion.rnn_type = RNNType.gru
@@ -198,9 +198,9 @@ TrainingConfig.only_model = False
 TrainingConfig.output_dir = "/med/TractoDiff/runs"
 TrainingConfig.snapshot = ""
 TrainingConfig.max_epoch = 140
-TrainingConfig.evaluation_freq = 20
+TrainingConfig.evaluation_freq = 5
 TrainingConfig.scheduler = ScheduleMethods.cosine
-TrainingConfig.lr = 5e-3
+TrainingConfig.lr = 3e-3
 TrainingConfig.weight_decay = 0
 # for cosine scheduler
 TrainingConfig.lr_t0 = 1

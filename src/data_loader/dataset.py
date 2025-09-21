@@ -2,6 +2,7 @@ import os
 import pickle
 import torch
 import random
+import numpy as np
 import nibabel as nib
 from torch.utils.data import Dataset
 
@@ -27,7 +28,7 @@ class TractographyDataset(Dataset):
             self.subjects = cfg.subjects[:1]
             self.logger.info(f"The subjects are {self.subjects}")
         else:
-            self.split = 'testset'
+            self.split = 'trainset'
             self.subjects = cfg.subjects[-1:]
 
         self.seq_length = cfg.seq_length
@@ -40,7 +41,13 @@ class TractographyDataset(Dataset):
 
         self.streamline_subjects = []
         
+        self.mean = None
+        self.std = None
+        
         self._load_data()
+        
+        if train:
+            self._compute_stats()
     
     def _load_data(self):
         """Load both 3D streamlines and condition vectors"""
@@ -59,19 +66,41 @@ class TractographyDataset(Dataset):
                 print(f"Warning: {pkl_path} not found. Skipping subject {subject}")
                 continue
             
-            for i, streamline in enumerate(streamlines[:1000]):
+            for i, streamline in enumerate(streamlines[:2000]):
                 if len(streamline) < self.seq_length:
                     continue
                 self.streamlines.append(streamline)
                 self.condition_vectors.append(condition_data[i]['observations'])
                 self.streamline_subjects.append(subject)
             
-            self.logger.info(f"Loaded {len(streamlines)} streamlines from subject {subject}")
+            self.logger.info(f"Loaded {len(streamlines)} streamlines from subject {subject} for {self.split}")
         
-        self.logger.info(f"Total usable streamlines: {len(self.streamlines)}")
+        self.logger.info(f"Total usable streamlines for {self.split}: {len(self.streamlines)}")
         
     def __len__(self):
         return len(self.streamlines)
+    
+    def _compute_stats(self):
+        """Computes mean and standard deviation for normalization."""
+        if not self.streamlines:
+            self.logger("Cannot compute stats, no streamlines loaded.")
+            self.mean = torch.zeros(3, dtype=torch.float32)
+            self.std = torch.ones(3, dtype=torch.float32)
+            return
+
+        self.logger.info("Computing normalization statistics...")
+        all_points = np.vstack(self.streamlines)
+        
+        self.mean = torch.tensor(np.mean(all_points, axis=0), dtype=torch.float32)
+        self.std = torch.tensor(np.std(all_points, axis=0), dtype=torch.float32)
+        
+        self.logger.info(f"Computed Mean: {self.mean.tolist()}")
+        self.logger.info(f"Computed Std Dev: {self.std.tolist()}")
+        
+    def set_stats(self, mean, std):
+        self.mean = mean
+        self.std = std
+        self.logger.info("Normalization stats set from training data.")
     
     def __getitem__(self, idx):
         """
@@ -104,8 +133,14 @@ class TractographyDataset(Dataset):
         points_tensor = torch.tensor(point_seq, dtype=torch.float32)
         condition_tensor = torch.tensor(first_point_condition, dtype=torch.float32)
         
+        if self.mean is not None and self.std is not None:
+            normalized_points = (points_tensor - self.mean) / self.std
+        else:
+            # Should not happen for training, but a safeguard
+            normalized_points = points_tensor
+        
         return {
-            'points': points_tensor,  # Shape: (16, 3)
+            'points': normalized_points,  # Shape: (16, 3)
             'condition': condition_tensor,  # Shape: (334,)
             'subject_id': subject_id,
             'bundle': self.bundle
