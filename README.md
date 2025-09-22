@@ -1,16 +1,16 @@
 # TractoDiff
 Tractography using diffusion 
 
-# Activate conda environment
+### Activate conda environment
 conda activate tractodiff
 
-# For training
+### For training
 python main.py -name {name of the experiment}
 
-# For inference
+### For inference
 python inference.py --snapshot /med/TractoDiff/snapshots/dtg_consistency_snapshot.pth.tar
 
-# For generating trk 
+### For generating trk 
 python generate_streamline.py 
                 --subject sub-1119 \
                 --bundle AF_L \
@@ -20,7 +20,7 @@ python generate_streamline.py
                 --seed_trk /med/TractoDiff/data/testset/sub-1119/tractography/sub-1119__AF_L.trk \
                 --output_trk /med/TractoDiff/visualizations/generated.trk 
 
-# For consistency distillation
+### For consistency distillation
 python /med/TractoDiff/consistency/dtg_cm_train.py \
 --teacher_model_path /med/TractoDiff/snapshots/dtgsnapshot.pth.tar \
 --output_dir /med/TractoDiff/consistency_results \
