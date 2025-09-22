@@ -49,46 +49,6 @@ def registration_collate_fn_stack_mode(data_dicts):
 
     return collated_dict
 
-def get_dataloader(cfg, train=True, logger = None):
-    """
-    Create a PyTorch DataLoader for tractography data
-    
-    Args:
-        bundle (str): Bundle name (e.g., 'AF_L')
-        subjects (list): List of subject IDs
-        split (str): Data split ('trainset' etc.)
-        batch_size (int): Batch size
-        seq_length (int): Length of point subsequence to extract
-        shuffle (bool): Whether to shuffle data
-        num_workers (int): Number of worker processes
-        
-    Returns:
-        DataLoader: PyTorch DataLoader
-    """
-    dataset = TractographyDataset(cfg=cfg, train=train, logger=logger)
-    sampler = DistributedSampler(dataset) if cfg.distributed else None
-    
-    if not train:
-        dataset.set_stats(train_dataset.mean, train_dataset.std) 
-    
-    shuffle = False
-    if(train):
-        shuffle = True
-    
-    dataloader = DataLoader(
-        dataset=dataset,
-        batch_size=cfg.batch_size,
-        num_workers=cfg.num_workers,
-        shuffle=shuffle,
-        sampler=sampler,
-        collate_fn=partial(registration_collate_fn_stack_mode),
-        worker_init_fn=reset_seed_worker_init_fn,
-        pin_memory=True,
-        drop_last=False,
-    )
-    
-    return dataloader
-
 def get_dataloaders(cfg, logger=None):
     """
     Creates and returns the training and evaluation dataloaders.
@@ -137,29 +97,6 @@ def get_dataloaders(cfg, logger=None):
     )
 
     return train_dataloader, eval_dataloader
-
-def train_data_loader(cfg, logger = None):
-    """
-    This function is to create a training dataloader with pytorch interface
-    Args:
-        cfg: The configuration of the dataset
-    Returns:
-        a dataloader in pytorch format
-    """
-    cfgs = copy.deepcopy(cfg)
-    return get_dataloader(cfg=cfgs, train=True, logger=logger)
-
-
-def evaluation_data_loader(cfg, logger = None):
-    """
-    This function is to create a evaluation dataloader with pytorch interface
-    Args:
-        cfg: The configuration of the dataset
-    Returns:
-        a dataloader in pytorch format
-    """
-    cfgs = copy.deepcopy(cfg)
-    return get_dataloader(cfg=cfgs, train=False, logger=logger)
 
 
 # if __name__ == "__main__":

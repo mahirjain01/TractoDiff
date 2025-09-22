@@ -92,7 +92,7 @@ def get_configuration():
         
     elif args.training_type == 1:
         # Short debug run
-        cfg.max_epoch = 50
+        cfg.max_epoch = 30
         
     else:
         raise ValueError("the data type is not defined")

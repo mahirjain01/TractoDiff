@@ -13,10 +13,10 @@ from torch.amp import autocast, GradScaler
 from src.models.model import get_model
 # from timm.optim import create_optimizer_v2
 from torch.utils.tensorboard import SummaryWriter
+from src.data_loader.dataset_tracto import get_dataloaders
 from torch.nn.parallel import DistributedDataParallel as DDP
 from src.utils.functions import to_device, get_device, release_cuda
 from src.utils.configs import ScheduleMethods, LossNames, DataDict
-from src.data_loader.dataset_tracto import train_data_loader, evaluation_data_loader, get_dataloaders
 
 from src.utils.logger import TrainingLogger
 
@@ -222,12 +222,13 @@ class TractographyTrainer:
             
             gt_normalized = data_dict['points']
             pred_normalized = output_dict['prediction']
+            pred_normalized_poses = torch.cumsum(pred_normalized, dim=1) 
             
             mean = self.norm_mean.view(1, 1, 3)
             std = self.norm_std.view(1, 1, 3)
             
             gt_denormalized = (gt_normalized * std) + mean
-            pred_denormalized = (pred_normalized * std) + mean
+            pred_denormalized = (pred_normalized_poses * std) + mean
             
             denormalized_dict = {
                 'points': data_dict['points'],        # Ground truth in real-world coords

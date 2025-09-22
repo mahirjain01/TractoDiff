@@ -148,8 +148,7 @@ class Loss3D(nn.Module):
         # print("Shape of groundtruth: ", ygt.shape)
         # print("Shape of prediction: ", y_hat.shape)
         output = {}
-        # y_hat_poses = torch.cumsum(y_hat, dim=1) 
-        y_hat_poses = y_hat 
+        y_hat_poses = torch.cumsum(y_hat, dim=1) 
 
         if self.use_traversability:
             B = y_hat_poses.shape[0]
@@ -215,9 +214,7 @@ class Loss3D(nn.Module):
         
         ygt = input_dict[DataDict.points]
         y_hat = input_dict[DataDict.prediction]
-        
         y_hat_poses = y_hat 
-        # y_hat_poses = torch.cumsum(y_hat, dim=1) 
         
         # Visualize 3D streamlines
         for idx in range(len(y_hat_poses)):
@@ -245,7 +242,7 @@ class Loss3D(nn.Module):
                     ground_truth=gt_denormalized[idx].detach().cpu().numpy(),
                     subject_id=subject_id,
                     bundle=bundle,
-                    split="trainset",
+                    split="testset",
                     output_file=vis_file
                 )
                 self.visualizations_this_epoch += 1
@@ -264,7 +261,7 @@ class Loss3D(nn.Module):
 
         if self.use_traversability:
             subject_id = input_dict[DataDict.subject_id][0]
-            wm_mask_path = f"/med/TractoDiff/data/trainset/{subject_id}/{subject_id}-generated_approximated_mask.nii.gz"
+            wm_mask_path = f"/med/TractoDiff/data/testset/{subject_id}/{subject_id}-generated_approximated_mask.nii.gz"
 
             wm_nifti = nib.load(wm_mask_path)
             wm_data = wm_nifti.get_fdata()
@@ -309,7 +306,7 @@ class Loss3D(nn.Module):
         return loss_dict
 
 
-def visualize_3d_streamlines(predictions, ground_truth, subject_id, bundle, split="trainset", output_file=None, context_tractogram=None):
+def visualize_3d_streamlines(predictions, ground_truth, subject_id, bundle, split="testset", output_file=None, context_tractogram=None):
     """
     Create a 3D visualization of predicted and ground truth streamlines.
     

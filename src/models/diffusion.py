@@ -25,7 +25,8 @@ class Diffusion(nn.Module):
         self.use_traversability = cfg.use_traversability
         self.estimate_traversability = cfg.estimate_traversability
         self.traversable_steps = cfg.traversable_steps
-
+        self.waypoint_dim = cfg.waypoint_dim
+        self.zd = cfg.diffusion_zd
         self.diffusion_step_embed_dim = 128
         condition_dim = 346
         
